@@ -1,4 +1,4 @@
-/* file.c: Implementation of memory backed file object (mmaped object). */
+/* file.c: 메모리를 기반으로 한 파일 객체(mmap된 객체)의 구현 */
 
 #include "vm/vm.h"
 
@@ -14,12 +14,13 @@ static const struct page_operations file_ops = {
 	.type = VM_FILE,
 };
 
-/* The initializer of file vm */
+/* 파일 가상 메모리의 초기화*/
 void
 vm_file_init (void) {
 }
 
-/* Initialize the file backed page */
+/* 파일 기반 페이지를 초기화하라 
+   파일 기반 페이지를 위한 초기화 함수*/
 bool
 file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */

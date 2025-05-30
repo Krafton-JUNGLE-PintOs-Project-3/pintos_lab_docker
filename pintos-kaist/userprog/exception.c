@@ -13,36 +13,35 @@ static long long page_fault_cnt;
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 
-/* Registers handlers for interrupts that can be caused by user
-   programs.
+/* 사용자 프로그램에 의해 발생할 수 있는 인터럽트에 대한 핸들러들을 등록합니다.
 
-   In a real Unix-like OS, most of these interrupts would be
-   passed along to the user process in the form of signals, as
-   described in [SV-386] 3-24 and 3-25, but we don't implement
-   signals.  Instead, we'll make them simply kill the user
-   process.
+   실제 유닉스 계열 OS에서는 이러한 인터럽트 대부분이  
+   [SV-386] 3-24와 3-25에서 설명된 것처럼,  
+   신호(signal)의 형태로 사용자 프로세스에 전달됩니다.  
+   하지만 우리는 신호를 구현하지 않기 때문에,  
+   대신 해당 인터럽트가 발생하면 사용자 프로세스를 종료시킵니다.
 
-   Page faults are an exception.  Here they are treated the same
-   way as other exceptions, but this will need to change to
-   implement virtual memory.
+   단, 페이지 폴트는 예외입니다.  
+   여기서는 다른 예외들과 동일하게 처리되지만,  
+   가상 메모리를 구현하려면 이 방식을 변경해야 합니다.
 
-   Refer to [IA32-v3a] section 5.15 "Exception and Interrupt
-   Reference" for a description of each of these exceptions. */
+   각 예외에 대한 설명은 [IA32-v3a]의 5.15절  
+   "Exception and Interrupt Reference"를 참고하세요. */
 void
 exception_init (void) {
-	/* These exceptions can be raised explicitly by a user program,
-	   e.g. via the INT, INT3, INTO, and BOUND instructions.  Thus,
-	   we set DPL==3, meaning that user programs are allowed to
-	   invoke them via these instructions. */
+	/* 이러한 예외들은 사용자 프로그램에 의해 명시적으로 발생할 수 있습니다.  
+	   예를 들어 `INT`, `INT3`, `INTO`, `BOUND` 명령어를 통해 발생할 수 있습니다.  
+	   따라서, 이러한 예외들은 DPL(Descriptor Privilege Level)을 3으로 설정하여  
+	   사용자 프로그램이 이러한 명령어를 통해 예외를 호출할 수 있도록 합니다. */
 	intr_register_int (3, 3, INTR_ON, kill, "#BP Breakpoint Exception");
 	intr_register_int (4, 3, INTR_ON, kill, "#OF Overflow Exception");
 	intr_register_int (5, 3, INTR_ON, kill,
 			"#BR BOUND Range Exceeded Exception");
 
-	/* These exceptions have DPL==0, preventing user processes from
-	   invoking them via the INT instruction.  They can still be
-	   caused indirectly, e.g. #DE can be caused by dividing by
-	   0.  */
+	/* 이러한 예외들은 DPL이 0으로 설정되어 있어,  
+	   사용자 프로세스가 INT 명령어를 통해 직접 호출할 수 없습니다.  
+	   하지만 여전히 간접적으로 발생할 수는 있습니다.  
+	   예를 들어, 0으로 나눌 경우 #DE(0 나누기 예외)가 발생할 수 있습니다. */
 	intr_register_int (0, 0, INTR_ON, kill, "#DE Divide Error");
 	intr_register_int (1, 0, INTR_ON, kill, "#DB Debug Exception");
 	intr_register_int (6, 0, INTR_ON, kill, "#UD Invalid Opcode Exception");
@@ -55,28 +54,30 @@ exception_init (void) {
 	intr_register_int (19, 0, INTR_ON, kill,
 			"#XF SIMD Floating-Point Exception");
 
-	/* Most exceptions can be handled with interrupts turned on.
-	   We need to disable interrupts for page faults because the
-	   fault address is stored in CR2 and needs to be preserved. */
+	/* 대부분의 예외는 인터럽트를 활성화한 상태에서도 처리할 수 있습니다.  
+	   하지만 페이지 폴트의 경우에는 인터럽트를 비활성화해야 합니다.  
+	   그 이유는 폴트가 발생한 주소가 CR2 레지스터에 저장되기 때문이며,  
+	   해당 값을 반드시 보존해야 하기 때문입니다. */
 	intr_register_int (14, 0, INTR_OFF, page_fault, "#PF Page-Fault Exception");
 }
 
-/* Prints exception statistics. */
+/* 예외 발생 통계를 출력합니다. */
 void
 exception_print_stats (void) {
 	printf ("Exception: %lld page faults\n", page_fault_cnt);
 }
 
-/* Handler for an exception (probably) caused by a user process. */
+/* 사용자 프로세스에 의해 (아마도) 발생한 예외를 처리하는 핸들러입니다. */
 static void
 kill (struct intr_frame *f) {
-	/* This interrupt is one (probably) caused by a user process.
-	   For example, the process might have tried to access unmapped
-	   virtual memory (a page fault).  For now, we simply kill the
-	   user process.  Later, we'll want to handle page faults in
-	   the kernel.  Real Unix-like operating systems pass most
-	   exceptions back to the process via signals, but we don't
-	   implement them. */
+	/* 이 인터럽트는 (아마도) 사용자 프로세스에 의해 발생한 것입니다.  
+	   예를 들어, 프로세스가 매핑되지 않은 가상 메모리에 접근하려고 했을 수 있습니다  
+	   (페이지 폴트의 예). 현재는 단순히 해당 사용자 프로세스를 종료시키지만,  
+	   나중에는 커널에서 페이지 폴트를 처리하도록 구현할 예정입니다.  
+
+	   실제 유닉스 계열 운영체제에서는 대부분의 예외를  
+	   시그널(signal)의 형태로 사용자 프로세스에 다시 전달하지만,  
+	   우리는 시그널을 구현하지 않습니다. */
 
 	/* The interrupt frame's code segment value tells us where the
 	   exception originated. */
