@@ -46,22 +46,48 @@ static struct frame *vm_evict_frame (void);
 /* 초기화 함수와 함께 대기 중인(pending) 페이지 객체를 생성합니다.
    페이지를 생성하고 싶다면 직접 생성하지 말고,
    반드시 이 함수나 vm_alloc_page를 통해 생성하세요. */
+// 처음 파일을 load 하게 되면 인자로 VM_ANON, 0x400000, writable, lazy_load_segment(아직은 비워진), aux(아직은 비워진)가 들어온다.
 bool
 vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		vm_initializer *init, void *aux) {
 
-	ASSERT (VM_TYPE(type) != VM_UNINIT)
+	ASSERT (VM_TYPE(type) != VM_UNINIT)			//VM_TYPE이 VM_UNINIT이 아니여야 함?
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 
 	/* 해당 사용자 페이지(upage)가 이미 사용 중인지 확인합니다. */
 	if (spt_find_page (spt, upage) == NULL) {
-		/* TODO: 페이지를 생성하고, VM 타입에 따라 적절한 초기화 함수(initializer)를 가져옵니다.
-		 * TODO: 그런 다음 uninit_new를 호출하여 "uninit" 페이지 구조체를 생성합니다. 
-		 * TODO: uninit_new를 호출한 이후에 필요한 필드를 수정해야 합니다. */
+		/* TODO: 페이지를 생성하고, VM 타입에 따라 적절한 초기화 함수(initializer)를 가져옵니다.*/
+		struct page *page = malloc(sizeof(struct page)); //페이지 생성?
+		if(page == NULL) return false;
+		//생성 성공시
+		page->va = upage;	//upage는 가상 주소?
+		page->writable = writable;
+		/* TODO: 그런 다음 uninit_new를 호출하여 "uninit" 페이지 구조체를 생성합니다. */
+		
+		//type에 맞는 initializer_operations을 설정해주어야 한다?
+		switch(type){
+			case VM_ANON:
+				uninit_new(page, upage, init, type, aux, anon_initializer);
+				break;
+			case VM_FILE:
+				uninit_new(page, upage, init, type, aux, file_backed_initializer);
+				break;
+			default:
+				return false;
+			break;
+		}
+		// uninit_new(page, upage, init, type, aux, page->operations);
+		/* TODO: uninit_new를 호출한 이후에 필요한 필드를 수정해야 합니다. */
+		// 필드를 수정?
 
 		/* TODO: 해당 페이지를 보조 페이지 테이블(SPT) 에 삽입합니다. */
+		if(spt_insert_page(spt, page)){
+			return true;
+		}
+		free(page);
 	}
+
 err:
 	return false;
 }
@@ -70,7 +96,7 @@ err:
    오류가 발생하면 NULL을 반환합니다. */
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-	struct page *page = NULL;
+	struct page *page;
 	/* TODO: 이 함수를 구현하세요. */
 	page->va = va; //탐색용 page에 va 넣고
 
@@ -203,7 +229,7 @@ vm_do_claim_page (struct page *page) {
 	/* TODO: 페이지의 가상 주소(VA)를 프레임의 물리 주소(PA)에 매핑하도록
     		 페이지 테이블 항목을 삽입합니다. */
 	if(pml4_get_page(thread_current()->pml4, page->va) == NULL){//va에 대해 해당하는 물리페이지가 pml4에 매핑이 안되어있으면
-		if(pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->page_writable))return false;
+		if(pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable))return false;
 		//page->writable 권한설정을 구현하면 그 값으로
 	}	
 	return true; 

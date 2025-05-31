@@ -23,7 +23,7 @@ vm_file_init (void) {
    파일 기반 페이지를 위한 초기화 함수*/
 bool
 file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
-	/* Set up the handler */
+	/* 핸들러 설정 */
 	page->operations = &file_ops;
 
 	struct file_page *file_page = &page->file;
