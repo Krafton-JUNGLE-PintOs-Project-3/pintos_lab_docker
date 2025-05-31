@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "list.h": "c",
+        "page_cache.h": "c",
+        "hash.h": "c",
+        "thread.h": "c"
+    }
+}
