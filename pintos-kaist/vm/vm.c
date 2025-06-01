@@ -6,6 +6,8 @@
 
 #include "threads/thread.h"
 
+#include "threads/vaddr.h" //pg_round_down 을 위해 추가
+
 static unsigned page_hash(const struct hash_elem *e, void *aux UNUSED);
 static bool hash_less (const struct hash_elem *a,const struct hash_elem *b,void *aux);
 /* 가상 메모리 서브시스템을 초기화합니다.
@@ -66,12 +68,12 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		/* TODO: 그런 다음 uninit_new를 호출하여 "uninit" 페이지 구조체를 생성합니다. */
 		
 		//type에 맞는 initializer_operations을 설정해주어야 한다?
-		switch(type){
+		switch(VM_TYPE(type)){	//type에 마킹이 되어서 들어오는 경우를 생각해야함?
 			case VM_ANON:
-				uninit_new(page, upage, init, type, aux, anon_initializer);
+				uninit_new(page, upage, init, type, aux, &anon_initializer);
 				break;
 			case VM_FILE:
-				uninit_new(page, upage, init, type, aux, file_backed_initializer);
+				uninit_new(page, upage, init, type, aux, &file_backed_initializer);
 				break;
 			default:
 				return false;
@@ -98,8 +100,9 @@ struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page;
 	/* TODO: 이 함수를 구현하세요. */
-	page->va = va; //탐색용 page에 va 넣고
-
+	page->va = pg_round_down(va); //탐색용 page에 va 넣고
+	// 페이지 밑단으로 변환하는 메크로를 활용해야 하는 것 아닌가?
+	//pg_round_down 메크로
 	struct hash_elem *e = hash_find(&spt->spt_hash, &page->hash_elem); //hash find안의 bucket find에서 해싱해줌
 	if (e != NULL){
 		return hash_entry(e, struct page, hash_elem);
@@ -229,7 +232,7 @@ vm_do_claim_page (struct page *page) {
 	/* TODO: 페이지의 가상 주소(VA)를 프레임의 물리 주소(PA)에 매핑하도록
     		 페이지 테이블 항목을 삽입합니다. */
 	if(pml4_get_page(thread_current()->pml4, page->va) == NULL){//va에 대해 해당하는 물리페이지가 pml4에 매핑이 안되어있으면
-		if(pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable))return false;
+		if(!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable))return false;
 		//page->writable 권한설정을 구현하면 그 값으로
 	}	
 	return true; 
