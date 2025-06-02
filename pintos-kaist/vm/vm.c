@@ -55,6 +55,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 	ASSERT (VM_TYPE(type) != VM_UNINIT)			//VM_TYPE이 VM_UNINIT이 아니여야 함?
 
+	struct thread *curr = thread_current(); //디버깅용
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 
 	/* 해당 사용자 페이지(upage)가 이미 사용 중인지 확인합니다. */
@@ -115,6 +116,7 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 bool
 spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
+	page->va = pg_round_down(page->va);
 	int succ = false;
 	/* TODO: 이 함수를 구현하세요. */
 	if(hash_insert(&spt->spt_hash, &page->hash_elem) == NULL){
@@ -192,6 +194,14 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	struct page *page = NULL;
+	struct thread *curr = thread_current(); //디버깅용
+	if(write == true){
+		return false;
+	}
+	page = spt_find_page(spt, addr);
+	if(page == NULL){
+		return false;
+	}
 	/* TODO: 페이지 폴트(fault)를 검증합니다. */
 	/* TODO: 여기에 여러분의 코드를 작성하세요. */
 
@@ -235,8 +245,8 @@ vm_do_claim_page (struct page *page) {
 		if(!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable))return false;
 		//page->writable 권한설정을 구현하면 그 값으로
 	}	
-	return true; 
-	// return swap_in (page, frame->kva);	//page_fault 핸들링시 필요한 부분
+	// return true; 
+	return swap_in (page, frame->kva);	//page_fault 핸들링시 필요한 부분
 }
 
 /* 새로운 보조 페이지 테이블(Supplemental Page Table, SPT)을 초기화합니다. */
