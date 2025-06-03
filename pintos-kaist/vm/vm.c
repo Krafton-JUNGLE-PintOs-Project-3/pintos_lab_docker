@@ -5,7 +5,7 @@
 #include "vm/inspect.h"
 
 #include "threads/thread.h"
-
+#include "threads/mmu.h"
 #include "threads/vaddr.h" //pg_round_down 을 위해 추가
 
 static unsigned page_hash(const struct hash_elem *e, void *aux UNUSED);
@@ -83,6 +83,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		// uninit_new(page, upage, init, type, aux, page->operations);
 		/* TODO: uninit_new를 호출한 이후에 필요한 필드를 수정해야 합니다. */
 		// 필드를 수정?
+		page->writable = writable;
 
 		/* TODO: 해당 페이지를 보조 페이지 테이블(SPT) 에 삽입합니다. */
 		if(spt_insert_page(spt, page)){
@@ -99,12 +100,13 @@ err:
    오류가 발생하면 NULL을 반환합니다. */
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-	struct page *page;
+	struct page *page = malloc(sizeof(struct page));
 	/* TODO: 이 함수를 구현하세요. */
 	page->va = pg_round_down(va); //탐색용 page에 va 넣고
 	// 페이지 밑단으로 변환하는 메크로를 활용해야 하는 것 아닌가?
 	//pg_round_down 메크로
 	struct hash_elem *e = hash_find(&spt->spt_hash, &page->hash_elem); //hash find안의 bucket find에서 해싱해줌
+	free(page);
 	if (e != NULL){
 		return hash_entry(e, struct page, hash_elem);
 	}
@@ -161,14 +163,14 @@ vm_evict_frame (void) {
 
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = NULL;
+	struct frame *frame = malloc(sizeof(struct frame));		//frame 메모리 할당
+
 	/* TODO: 이 함수를 구현하세요. */
 
 	void *kva = palloc_get_page(PAL_USER);		//USER_PAL로 커널 가상 주소 할당
 	if(kva == NULL){
 		PANIC("todo");				//페이지 할당 불가시 아직 미구현
 	} 
-	frame = malloc(sizeof(struct frame));		//frame 메모리 할당
 
 	frame->kva = kva;							//커널 가상 주소 저장
 	frame->page = NULL;
@@ -195,9 +197,14 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	struct page *page = NULL;
 	struct thread *curr = thread_current(); //디버깅용
-	if(write == true){
+	if(is_kernel_vaddr(addr)){
 		return false;
 	}
+
+	// if(write == true){
+	// 	return false;
+	// }
+
 	page = spt_find_page(spt, addr);
 	if(page == NULL){
 		return false;
@@ -240,7 +247,8 @@ vm_do_claim_page (struct page *page) {
 	page->frame = frame;
 
 	/* TODO: 페이지의 가상 주소(VA)를 프레임의 물리 주소(PA)에 매핑하도록
-    		 페이지 테이블 항목을 삽입합니다. */
+    		 페이지 테이블 항목을 삽입합니다. */	 
+
 	if(pml4_get_page(thread_current()->pml4, page->va) == NULL){//va에 대해 해당하는 물리페이지가 pml4에 매핑이 안되어있으면
 		if(!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable))return false;
 		//page->writable 권한설정을 구현하면 그 값으로

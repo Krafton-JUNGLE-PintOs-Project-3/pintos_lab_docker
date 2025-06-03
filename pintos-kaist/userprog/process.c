@@ -762,12 +762,15 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: 파일에서 세그먼트를 로드합니다. */
 	struct read_file *read_file_load = (struct read_file *)aux;
 	/* TODO: 이 함수는 주소 VA에서 첫 번째 페이지 폴트가 발생했을 때 호출됩니다. */
-	// file_seek(read_file_load->file, read_file_load->ofs);
+	size_t page_zero_bytes = PGSIZE - read_file_load->page_read_bytes;
+
+	file_seek(read_file_load->file, read_file_load->ofs);
 
 	if(file_read(read_file_load->file, page->frame->kva, read_file_load->page_read_bytes) != (int)read_file_load->page_read_bytes){
+		palloc_free_page(page->frame->kva);
 		return false;
 	}
-	memset(page->frame->kva + read_file_load->page_read_bytes, 0, read_file_load->page_zero_bytes);
+	memset(page->frame->kva + read_file_load->page_read_bytes, 0, page_zero_bytes);
 	return true;
 	/* TODO: 이 함수를 호출할 때 VA(가상 주소)는 접근 가능한 상태입니다. */
 }
@@ -824,7 +827,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
 
-		ofs += read_bytes;
+		ofs += page_read_bytes;
 	}
 	return true;
 }
