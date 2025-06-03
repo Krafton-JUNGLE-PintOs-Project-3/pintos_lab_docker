@@ -35,8 +35,9 @@ enum vm_type {
 
 struct page_operations;
 struct thread;
-
-#define VM_TYPE(type) ((type) & 7)
+//vm_alloc_page_with_initializer 함수 작성시
+//해당 메크로를 사용하면 편리??
+#define VM_TYPE(type) ((type) & 7)		
 
 /* "page"를 표현하는 구조체입니다.
    이 구조체는 일종의 "부모 클래스" 역할을 하며,

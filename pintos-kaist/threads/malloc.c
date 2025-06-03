@@ -79,20 +79,19 @@ malloc_init (void) {
 	}
 }
 
-/* Obtains and returns a new block of at least SIZE bytes.
-   Returns a null pointer if memory is not available. */
+/* 최소 SIZE 바이트의 새 블록을 가져와 반환합니다..
+   메모리를 사용할 수 없는 경우 null 포인터를 반환합니다.. */
 void *
 malloc (size_t size) {
 	struct desc *d;
 	struct block *b;
 	struct arena *a;
 
-	/* A null pointer satisfies a request for 0 bytes. */
+	/* 널 포인터는 0바이트 요청을 충족합니다. */
 	if (size == 0)
 		return NULL;
 
-	/* Find the smallest descriptor that satisfies a SIZE-byte
-	   request. */
+	/* SIZE 바이트 요청을 충족하는 가장 작은 설명자??를 찾습니다. */
 	for (d = descs; d < descs + desc_cnt; d++)
 		if (d->block_size >= size)
 			break;

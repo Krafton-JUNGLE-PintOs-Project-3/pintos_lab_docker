@@ -107,37 +107,36 @@ kill (struct intr_frame *f) {
 	}
 }
 
-/* Page fault handler.  This is a skeleton that must be filled in
-   to implement virtual memory.  Some solutions to project 2 may
-   also require modifying this code.
+/* 페이지 폴트 핸들러입니다.
+  이 코드는 가상 메모리를 구현하기 위해 반드시 완성되어야 하는 뼈대(skeleton) 코드입니다.
+  프로젝트 2의 일부 해법에서는 이 코드를 수정해야 할 수도 있습니다.
 
-   At entry, the address that faulted is in CR2 (Control Register
-   2) and information about the fault, formatted as described in
-   the PF_* macros in exception.h, is in F's error_code member.  The
-   example code here shows how to parse that information.  You
-   can find more information about both of these in the
-   description of "Interrupt 14--Page Fault Exception (#PF)" in
-   [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
+  진입 시, 폴트가 발생한 주소는 CR2(Control Register 2) 레지스터에 저장되어 있으며,
+  폴트에 대한 정보는 exception.h에 정의된 PF_* 매크로 형식으로 F 구조체의 error_code 멤버에 저장됩니다.
+  아래의 예제 코드는 그 정보를 어떻게 파싱하는지 보여줍니다.
+
+  이 내용에 대한 더 많은 정보는
+  [IA32-v3a] 문서의 5.15절, **"Exception and Interrupt Reference"**의
+  "Interrupt 14--Page Fault Exception (#PF)" 부분에서 확인할 수 있습니다. */
 static void
 page_fault (struct intr_frame *f) {
-	bool not_present;  /* True: not-present page, false: writing r/o page. */
-	bool write;        /* True: access was write, false: access was read. */
-	bool user;         /* True: access by user, false: access by kernel. */
+	bool not_present;  /* True: 존재하지 않는(not-present) 페이지, false: 읽기 전용(r/o) 페이지에 쓰기 시도 중. */
+	bool write;        /* True: 접근은 쓰기(write)였고, false: 접근은 읽기(read)였다. */
+	bool user;         /* True: 사용자(user)에 의한 접근입니다. false라면, 커널(kernel)에 의한 접근입니다. */
 	void *fault_addr;  /* Fault address. */
 
-	/* Obtain faulting address, the virtual address that was
-	   accessed to cause the fault.  It may point to code or to
-	   data.  It is not necessarily the address of the instruction
-	   that caused the fault (that's f->rip). */
+	/* 페이지 폴트를 발생시킨 가상 주소(faulting address)를 구합니다.
+	   이 주소는 코드(명령어) 또는 데이터일 수 있습니다.
+	   이 주소는 반드시 페이지 폴트를 유발한 명령어의 주소는 아닙니다 (그건 f->rip에 있습니다). */
 
 	fault_addr = (void *) rcr2();
 
-	/* Turn interrupts back on (they were only off so that we could
-	   be assured of reading CR2 before it changed). */
+	/* 인터럽트를 다시 활성화합니다. 
+	   (인터럽트를 비활성화했던 이유는 CR2 레지스터를 읽기 전에 그 값이 변경되지 않도록 보장하기 위함이었습니다.) */
 	intr_enable ();
 
 
-	/* Determine cause. */
+	/* 원인을 파악하라. */
 	not_present = (f->error_code & PF_P) == 0;
 	write = (f->error_code & PF_W) != 0;
 	user = (f->error_code & PF_U) != 0;

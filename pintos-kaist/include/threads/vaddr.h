@@ -31,8 +31,8 @@
 /* 가장 가까운 페이지 경계로 내림(round down). 
    어떤 주소가 페이지 중간에 있다면, 
    그 주소를 포함하는 현재 페이지의 시작 주소로 내리는 것을 의미*/
-#define pg_round_down(va) (void *) ((uint64_t) (va) & ~PGMASK)
 
+#define pg_round_down(va) (void *) ((uint64_t) (va) & ~PGMASK)
 /* 커널 가상 주소 시작점 */
 #define KERN_BASE LOADER_KERN_BASE
 
@@ -46,11 +46,11 @@
 #define is_kernel_vaddr(vaddr) ((uint64_t)(vaddr) >= KERN_BASE)
 
 // FIXME: add checking
-/* Returns kernel virtual address at which physical address PADDR
+/* 물리 주소 PADDR에 해당하는 커널 가상 주소를 반환합니다.
  *  is mapped. */
 #define ptov(paddr) ((void *) (((uint64_t) paddr) + KERN_BASE))
 
-/* Returns physical address at which kernel virtual address VADDR
+/* 커널 가상 주소 VADDR에 해당하는 물리 주소를 반환합니다.
  * is mapped. */
 #define vtop(vaddr) \
 ({ \

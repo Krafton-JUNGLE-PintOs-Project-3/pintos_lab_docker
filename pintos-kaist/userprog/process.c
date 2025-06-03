@@ -455,8 +455,8 @@ process_activate (struct thread *next) {
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-/* Executable header.  See [ELF1] 1-4 to 1-8.
- * This appears at the very beginning of an ELF binary. */
+/* 실행 파일 헤더입니다. [ELF1] 1-4부터 1-8까지를 참조하세요.
+   ELF 바이너리의 맨 처음에 나타납니다 */
 struct ELF64_hdr {
 	unsigned char e_ident[EI_NIDENT];
 	uint16_t e_type;
@@ -562,8 +562,8 @@ load (const char *file_name, struct intr_frame *if_) {
 			case PT_LOAD:
 				if (validate_segment (&phdr, file)) {
 					bool writable = (phdr.p_flags & PF_W) != 0;
-					uint64_t file_page = phdr.p_offset & ~PGMASK;
-					uint64_t mem_page = phdr.p_vaddr & ~PGMASK;
+					uint64_t file_page = phdr.p_offset & ~PGMASK;	//file_page는 오프셋?
+					uint64_t mem_page = phdr.p_vaddr & ~PGMASK;		//mem_page는 가상 주소?
 					uint64_t page_offset = phdr.p_vaddr & PGMASK;
 					uint32_t read_bytes, zero_bytes;
 					if (phdr.p_filesz > 0) {
@@ -594,12 +594,6 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
-
-	/* TODO: Your code goes here.
-	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-
-	//여기서 argument passing 구현하기
-
 
 	success = true;
 
@@ -766,7 +760,15 @@ install_page (void *upage, void *kpage, bool writable) {
 static bool
 lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: 파일에서 세그먼트를 로드합니다. */
+	struct read_file *read_file_load = (struct read_file *)aux;
 	/* TODO: 이 함수는 주소 VA에서 첫 번째 페이지 폴트가 발생했을 때 호출됩니다. */
+	// file_seek(read_file_load->file, read_file_load->ofs);
+
+	if(file_read(read_file_load->file, page->frame->kva, read_file_load->page_read_bytes) != (int)read_file_load->page_read_bytes){
+		return false;
+	}
+	memset(page->frame->kva + read_file_load->page_read_bytes, 0, read_file_load->page_zero_bytes);
+	return true;
 	/* TODO: 이 함수를 호출할 때 VA(가상 주소)는 접근 가능한 상태입니다. */
 }
 
@@ -797,11 +799,22 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		/* 이 페이지를 어떻게 채울지 계산합니다.  
 		   PAGE_READ_BYTES 바이트는 FILE에서 읽고,  
 		   마지막 PAGE_ZERO_BYTES 바이트는 0으로 초기화합니다.*/
-		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-		size_t page_zero_bytes = PGSIZE - page_read_bytes;
+		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;	//파일로 부터 읽을 바이트 수?
+		size_t page_zero_bytes = PGSIZE - page_read_bytes;  				//0으로 채워야 할 바이트의 수?
 
 		/* TODO: `lazy_load_segment` 함수에 정보를 전달하기 위해 `aux`를 설정합니다. */
-		void *aux = NULL;
+		// 무슨 정보가 들어가야 하는지?
+		//file_read에 필요한 정보?
+
+		struct read_file *read_file_load = malloc(sizeof(struct read_file));	//read_file 구조체 할당
+		read_file_load->file = file;
+		read_file_load->ofs = ofs;
+		read_file_load->page_read_bytes = page_read_bytes;
+		read_file_load->page_zero_bytes = page_zero_bytes;
+		read_file_load->upage = upage;
+
+		// void *aux = NULL;
+		void *aux = (void *)read_file_load;
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
 					writable, lazy_load_segment, aux))
 			return false;
@@ -810,6 +823,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+
+		ofs += read_bytes;
 	}
 	return true;
 }
@@ -819,10 +834,20 @@ static bool
 setup_stack (struct intr_frame *if_) {
 	bool success = false;
 	void *stack_bottom = (void *) (((uint8_t *) USER_STACK) - PGSIZE);
+	struct thread *curr = thread_current();		//디버깅용
 
-	/* TODO: `stack_bottom` 위치에 스택을 매핑하고, 즉시 해당 페이지를 할당(claim)합니다.
-	 * TODO: 성공하면, 해당 값에 따라 `rsp`를 설정합니다.
-	 * TODO: 해당 페이지를 스택으로 표시해야 합니다. */
+	/* TODO: `stack_bottom` 위치에 스택을 매핑하고, 즉시 해당 페이지를 할당(claim)합니다. */
+	//페이지를 초기화 하는데 사용
+	if(!vm_alloc_page_with_initializer (VM_ANON | VM_MARKER_0, stack_bottom, true, NULL, NULL)){
+		return success;
+	}
+	if(!vm_claim_page(stack_bottom)){
+		return success;
+	}
+	/* TODO: 성공하면, 해당 값에 따라 `rsp`를 설정합니다.*/
+	if_->rsp = USER_STACK;
+	/* TODO: 해당 페이지를 스택으로 표시해야 합니다. */
+	success = true;
 	/* TODO: 여기에 여러분의 코드가 들어갑니다. */
 
 	return success;

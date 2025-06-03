@@ -64,11 +64,10 @@ file_get_inode (struct file *file) {
 	return file->inode;
 }
 
-/* Reads SIZE bytes from FILE into BUFFER,
- * starting at the file's current position.
- * Returns the number of bytes actually read,
- * which may be less than SIZE if end of file is reached.
- * Advances FILE's position by the number of bytes read. */
+/* FILE의 현재 위치에서 시작하여, BUFFER로 SIZE 바이트를 읽습니다.
+   실제로 읽은 바이트 수를 반환하며,
+   파일의 끝(EOF)에 도달한 경우 SIZE보다 작을 수 있습니다.
+   또한, 읽은 만큼 FILE의 위치를 앞으로 이동시킵니다.. */
 off_t
 file_read (struct file *file, void *buffer, off_t size) {
 	off_t bytes_read = inode_read_at (file->inode, buffer, size, file->pos);
