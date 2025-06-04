@@ -4,18 +4,24 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
+#include "threads/synch.h"	//hash_lock을 위해서 필요
 #include "threads/thread.h"
 #include "threads/mmu.h"
 #include "threads/vaddr.h" //pg_round_down 을 위해 추가
 
 static unsigned page_hash(const struct hash_elem *e, void *aux UNUSED);
 static bool hash_less (const struct hash_elem *a,const struct hash_elem *b,void *aux);
+void spt_destructor(struct hash_elem *e, void* aux);
 /* 가상 메모리 서브시스템을 초기화합니다.
    이를 위해 각 서브시스템의 초기화 코드들을 호출합니다. */
+
+
 void
 vm_init (void) {
 	vm_anon_init (); 
 	vm_file_init ();
+	lock_init(&hash_lock);
+
 #ifdef EFILESYS  /* For project 4 */
 	pagecache_init ();
 #endif
@@ -91,7 +97,6 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		}
 		free(page);
 	}
-
 err:
 	return false;
 }
@@ -104,26 +109,27 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	/* TODO: 이 함수를 구현하세요. */
 	page->va = pg_round_down(va); //탐색용 page에 va 넣고
 	// 페이지 밑단으로 변환하는 메크로를 활용해야 하는 것 아닌가?
-	//pg_round_down 메크로
 	struct hash_elem *e = hash_find(&spt->spt_hash, &page->hash_elem); //hash find안의 bucket find에서 해싱해줌
+
 	free(page);
 	if (e != NULL){
 		return hash_entry(e, struct page, hash_elem);
 	}
 	return NULL;
-	// return page;
 }
 
 /* 검증 과정을 포함하여 PAGE를 보조 페이지 테이블(SPT) 에 삽입합니다. */
 bool
 spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
-	page->va = pg_round_down(page->va);
+	// page->va = pg_round_down(page->va);
 	int succ = false;
 	/* TODO: 이 함수를 구현하세요. */
+	lock_acquire(&hash_lock);
 	if(hash_insert(&spt->spt_hash, &page->hash_elem) == NULL){
 		succ = true;
 	}
+	lock_release(&hash_lock);	
 
 	return succ;
 }
@@ -167,7 +173,7 @@ vm_get_frame (void) {
 
 	/* TODO: 이 함수를 구현하세요. */
 
-	void *kva = palloc_get_page(PAL_USER);		//USER_PAL로 커널 가상 주소 할당
+	void *kva = palloc_get_page(PAL_USER | PAL_ZERO);		//USER_PAL로 커널 가상 주소 할당
 	if(kva == NULL){
 		PANIC("todo");				//페이지 할당 불가시 아직 미구현
 	} 
@@ -197,22 +203,21 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	struct page *page = NULL;
 	struct thread *curr = thread_current(); //디버깅용
-	if(is_kernel_vaddr(addr)){
+	
+	if(addr == NULL || is_kernel_vaddr(addr)){
 		return false;
 	}
 
-	// if(write == true){
-	// 	return false;
-	// }
-
-	page = spt_find_page(spt, addr);
-	if(page == NULL){
-		return false;
+	if(not_present){
+		page = spt_find_page(spt, addr);
+		if(page == NULL){
+			return false;
+		}
+		return vm_do_claim_page (page);
 	}
+	return false;
 	/* TODO: 페이지 폴트(fault)를 검증합니다. */
 	/* TODO: 여기에 여러분의 코드를 작성하세요. */
-
-	return vm_do_claim_page (page);
 }
 
 /* Free the page.
@@ -251,9 +256,8 @@ vm_do_claim_page (struct page *page) {
 
 	if(pml4_get_page(thread_current()->pml4, page->va) == NULL){//va에 대해 해당하는 물리페이지가 pml4에 매핑이 안되어있으면
 		if(!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->writable))return false;
-		//page->writable 권한설정을 구현하면 그 값으로
 	}	
-	// return true; 
+
 	return swap_in (page, frame->kva);	//page_fault 핸들링시 필요한 부분
 }
 
@@ -264,10 +268,41 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 	
 }
 
+
 /* 보조 페이지 테이블(SPT)을 원본(src)에서 대상(dst)으로 복사합니다. */
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
-		struct supplemental_page_table *src UNUSED) {
+        struct supplemental_page_table *src UNUSED) {
+    struct hash_elem *e;
+    struct hash_iterator hash_iter;
+	bool succ = true;
+	
+    hash_first(&hash_iter, &src->spt_hash);
+    while (hash_next(&hash_iter)) {
+        e = hash_cur(&hash_iter);
+        struct page *src_page = hash_entry(e, struct page, hash_elem);
+        void *upage = src_page->va;
+        
+		// enum vm_type type = page_get_type(src_page);
+
+		enum vm_type type = src_page->operations->type;
+        bool writable = src_page->writable;
+		struct page *dst_page;
+
+		//aux값을 이렇게 넘길 수 있는지 의문
+        switch (type){
+            case VM_UNINIT:
+                if(!vm_alloc_page_with_initializer(src_page->uninit.type, upage, writable, src_page->uninit.init, src_page->uninit.aux)) succ = false;
+            break;
+			default:
+				if(!vm_alloc_page_with_initializer(type, upage, writable, NULL, NULL)) succ = false;
+                if(!vm_claim_page(upage))succ = false;
+                dst_page = spt_find_page(dst, src_page->va);
+                memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
+			break;
+        }
+    }
+    return succ;
 }
 
 /* 보충 페이지 테이블에서 리소스 보류 해제 */
@@ -275,10 +310,14 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: 스레드가 보유한 모든 supplemental_page_table을 파괴합니다.
 	 * TODO: 수정된 내용을 모두 저장소에 다시 기록합니다. */
+	struct hash_iterator hash_iter;
+	struct hash_elem *e;
+
+	lock_acquire(&hash_lock);	
+	hash_destroy(&spt->spt_hash, spt_destructor);
+	lock_release(&hash_lock);
 }
 
-
-//hash
 
 //hash_hash 함수
 static unsigned
@@ -292,4 +331,10 @@ static bool hash_less (const struct hash_elem *a,const struct hash_elem *b,void 
 	struct page *pa = hash_entry(a, struct page, hash_elem);
     struct page *pb = hash_entry(b, struct page, hash_elem);
 	return pa->va < pb->va;
+}
+
+void spt_destructor(struct hash_elem *e, void* aux){
+    const struct page *p = hash_entry(e, struct page, hash_elem);
+    destroy(p);
+	free(p);
 }

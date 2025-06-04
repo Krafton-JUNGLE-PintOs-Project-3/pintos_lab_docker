@@ -17,6 +17,7 @@ static const struct page_operations file_ops = {
 /* 파일 가상 메모리의 초기화*/
 void
 vm_file_init (void) {
+
 }
 
 /* 파일 기반 페이지를 초기화하라 
@@ -24,6 +25,7 @@ vm_file_init (void) {
 bool
 file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* 핸들러 설정 */
+	memset(&page->uninit, 0, sizeof(struct uninit_page));
 	page->operations = &file_ops;
 
 	struct file_page *file_page = &page->file;

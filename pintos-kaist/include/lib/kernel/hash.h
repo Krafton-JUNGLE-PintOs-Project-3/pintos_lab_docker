@@ -21,6 +21,7 @@ hash_entry 매크로를 이용하면 struct hash_elem에서 다시 해당 구조
 #include <stdint.h>
 #include "list.h"
 
+extern struct lock hash_lock;
 /* Hash element. */
 struct hash_elem {
 	struct list_elem list_elem;

@@ -65,4 +65,5 @@ uninit_destroy (struct page *page) {
 	struct uninit_page *uninit UNUSED = &page->uninit;
 	/* TODO: Fill this function.
 	 * TODO: 수행할 작업이 없다면 그냥 반환하세요. */
+	return;
 }

@@ -3,6 +3,9 @@
 #include <stdbool.h>
 #include "threads/palloc.h"
 
+#include <string.h>
+
+
 enum vm_type {
 	/* 페이지가 초기화되지 않았습니다. */
 	VM_UNINIT = 0,
@@ -32,6 +35,7 @@ enum vm_type {
 #ifdef EFILESYS
 #include "filesys/page_cache.h"
 #endif
+
 
 struct page_operations;
 struct thread;
@@ -66,6 +70,17 @@ struct page {
 #endif
 	};
 };
+
+
+//file_read에 필요한 정보를 담는 구조체
+
+struct read_file{       //read_file에 필요한 구조체
+	struct file *file;
+	off_t ofs;
+	size_t page_read_bytes;
+	size_t page_zero_bytes;
+};
+
 
 /* 프레임의 표현 방식 */
 struct frame {
@@ -119,5 +134,7 @@ bool vm_alloc_page_with_initializer (enum vm_type type, void *upage,
 void vm_dealloc_page (struct page *page);
 bool vm_claim_page (void *va);
 enum vm_type page_get_type (struct page *page);
+static bool
+vm_do_claim_page (struct page *page);
 
 #endif  /* VM_VM_H */

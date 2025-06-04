@@ -7,6 +7,9 @@
 #include "../debug.h"
 #include "threads/malloc.h"
 
+#include "threads/synch.h"	//hash_lock을 위해서 필요
+
+
 #define list_elem_to_hash_elem(LIST_ELEM)                       \
 	list_entry(LIST_ELEM, struct hash_elem, list_elem)
 
@@ -16,6 +19,9 @@ static struct hash_elem *find_elem (struct hash *, struct list *,
 static void insert_elem (struct hash *, struct list *, struct hash_elem *);
 static void remove_elem (struct hash *, struct hash_elem *);
 static void rehash (struct hash *);
+
+struct lock hash_lock;			//hash 테이블 접근시 사용
+
 
 /* 해시 테이블 H를 초기화합니다.
    이때, 해시 값 계산에는 HASH 함수를 사용하고,
