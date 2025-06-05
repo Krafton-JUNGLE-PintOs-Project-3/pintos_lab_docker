@@ -143,10 +143,10 @@ page_fault (struct intr_frame *f) {
 
 #ifdef VM
 	/* For project 3 and later. */
-	if((!not_present && write) || (fault_addr < 0x400000 || fault_addr >= USER_STACK)){
-		sys_exit(-1);
-	}
-
+	// //user 가상 영역을 넘어가는 요청일 경우
+	// if((!not_present && write) || (fault_addr < 0x400000 || fault_addr >= USER_STACK)){
+	// 	sys_exit(-1);
+	// }
 
 	if (vm_try_handle_fault (f, fault_addr, user, write, not_present))
 		return;
@@ -155,17 +155,15 @@ page_fault (struct intr_frame *f) {
 	/* Count page faults. */
 	page_fault_cnt++;
 
-	if(not_present || is_kernel_vaddr(fault_addr)){
-		sys_exit(-1);
-	}
-	else{
+	sys_exit(-1);
+
 		/* If the fault is true fault, show info and exit. */
-		printf ("Page fault at %p: %s error %s page in %s context.\n",
-				fault_addr,
-				not_present ? "not present" : "rights violation",
-				write ? "writing" : "reading",
-				user ? "user" : "kernel");
-		kill (f);
-	}
+	printf ("Page fault at %p: %s error %s page in %s context.\n",
+			fault_addr,
+			not_present ? "not present" : "rights violation",
+			write ? "writing" : "reading",
+			user ? "user" : "kernel");
+	kill (f);
+	
 }
 

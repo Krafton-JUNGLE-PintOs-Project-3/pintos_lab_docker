@@ -87,9 +87,10 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			f->R.rax = result;	
 			break;
 		}
-		case SYS_WAIT:
+		case SYS_WAIT:{
 			f->R.rax = sys_wait(f->R.rdi);
 			break;
+		}
 		case SYS_OPEN:{
 			char * filename = (char*)f->R.rdi;
 			f->R.rax = sys_open(filename);
@@ -137,10 +138,21 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			f->R.rax = sys_tell((int)f->R.rdi);
 			break;
 		}
-	}
-
+		case SYS_CLOSE: {
+			int fd = (int) f->R.rdi;
+			sys_close(fd);
+			break;
+		}
+		default:
+            sys_exit(-1);
+	
 	// thread_exit ();
+	}
 }
+
+
+
+
 
 void
 sys_halt(void){
@@ -334,6 +346,7 @@ sys_close(int fd){
 	lock_acquire(&file_lock);
 	file_close(file);	
 	lock_release(&file_lock);
+	cur->file_table[fd] = NULL;
 }
 
 bool
@@ -381,17 +394,9 @@ void check_address(void *addr){
 	if(!is_user_vaddr(addr) || addr == NULL){
 		sys_exit(-1);
 	}
-	// || !spt_find_page(&curr->spt, addr
-	
-	if(pml4_get_page(curr->pml4, addr) == NULL){
-		if(!vm_claim_page(addr)){
-			sys_exit(-1);
-		}
-	}
 
-	// struct page *new_page = spt_find_page(&curr->spt, addr);
-	// if(new_page == NULL){
-	// 	sys_exit(-1);
+	// if(pml4_get_page(curr->pml4, addr) == NULL){
+	// 	return;
 	// }
 
 }

@@ -260,6 +260,7 @@ process_exec (void *f_name) {
 	/* 스레드 구조체 내의 `intr_frame`을 사용할 수 없습니다.  
 	   그 이유는 현재 스레드가 리스케줄될 때,  
 	   해당 멤버에 실행 정보를 저장하기 때문입니다. */
+	struct thread *curr = thread_current(); 
 	struct intr_frame _if;
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
@@ -319,11 +320,14 @@ process_exec (void *f_name) {
 	
 	_if.rsp -= sizeof(void *);
 	memset(_if.rsp, 0, sizeof(char *));
+	
+	// curr->stack_bottom = _if.rsp;	//유저 모드에서 커널 모드로 전환 시 rsp를 thread에 저장한다.
 
 	palloc_free_page (file_name);
 	file_name = NULL;
 
 	/* Start switched process. */
+	
 	do_iret (&_if);
 	NOT_REACHED ();
 }
@@ -839,7 +843,6 @@ setup_stack (struct intr_frame *if_) {
 	bool success = false;
 	void *stack_bottom = (void *) (((uint8_t *) USER_STACK) - PGSIZE);
 	struct thread *curr = thread_current();		//디버깅용
-
 	/* TODO: `stack_bottom` 위치에 스택을 매핑하고, 즉시 해당 페이지를 할당(claim)합니다. */
 	//페이지를 초기화 하는데 사용
 	if(!vm_alloc_page_with_initializer (VM_ANON | VM_MARKER_0, stack_bottom, true, NULL, NULL)){
@@ -850,6 +853,8 @@ setup_stack (struct intr_frame *if_) {
 	}
 	/* TODO: 성공하면, 해당 값에 따라 `rsp`를 설정합니다.*/
 	if_->rsp = USER_STACK;
+	curr->stack_bottom = stack_bottom;
+
 	/* TODO: 해당 페이지를 스택으로 표시해야 합니다. */
 	success = true;
 	/* TODO: 여기에 여러분의 코드가 들어갑니다. */

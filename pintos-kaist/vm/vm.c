@@ -189,6 +189,14 @@ vm_get_frame (void) {
 /* 스택 영역을 확장하는 작업 */
 static void
 vm_stack_growth (void *addr UNUSED) {
+    struct thread *curr = thread_current();
+    void* stack_bottom = curr->stack_bottom;
+    while (addr < stack_bottom){
+        stack_bottom -= PGSIZE;
+        if(vm_alloc_page_with_initializer (VM_ANON | VM_MARKER_0, stack_bottom, true, NULL, NULL))
+            curr->stack_bottom = stack_bottom;
+        else break;
+    }
 }
 
 /* 쓰기 보호된 페이지에서 발생한 페이지 폴트(fault)를 처리합니다. */
@@ -199,26 +207,53 @@ vm_handle_wp (struct page *page UNUSED) {
 /* 성공하면 true를 반환합니다. */
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
-		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
-	struct page *page = NULL;
+        bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
+    struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
+    struct page *page = NULL;
 	struct thread *curr = thread_current(); //디버깅용
-	
-	if(addr == NULL || is_kernel_vaddr(addr)){
-		return false;
-	}
 
-	if(not_present){
-		page = spt_find_page(spt, addr);
-		if(page == NULL){
-			return false;
+    /* TODO: Validate the fault */
+    /* TODO: Your code goes here */
+    if (addr == NULL||is_kernel_vaddr(addr))
+        return false;
+    if (not_present)
+    {
+		if((USER_STACK > f->rsp) && addr >= (f->rsp - 8) && (addr <= curr->stack_bottom) && addr >= (USER_STACK - 0x1000000)){
+			vm_stack_growth(addr);
 		}
-		return vm_do_claim_page (page);
-	}
-	return false;
-	/* TODO: 페이지 폴트(fault)를 검증합니다. */
-	/* TODO: 여기에 여러분의 코드를 작성하세요. */
+        page = spt_find_page(spt, addr);
+
+        if (!page || (write && !page->writable)){
+            return false;
+        }
+        return vm_do_claim_page(page);
+    }
+    return false;
 }
+
+// bool
+// vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
+// 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
+// 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
+// 	struct page *page = NULL;
+// 	struct thread *curr = thread_current(); //디버깅용
+	
+// 	if(addr == NULL || is_kernel_vaddr(addr)){
+// 		return false;
+// 	}
+
+// 	//스택에 접근하는 경우에 할당 - 스택에 접근하는 경우와 아닌 경우를 구별할 수 있어야 한다.
+// 	//스택 포인터 아래의 스택에 쓸 경우, 스택 포인터 아래 8바이트에 대해서 page fault를 발생시킬 수 있다.
+
+// 	if(not_present){
+// 		page = spt_find_page(spt, addr);
+// 		if(page == NULL){
+// 			return false;
+// 		}
+// 		return vm_do_claim_page (page);
+// 	}
+// 	return false;
+// }
 
 /* Free the page.
  * 이 함수는 수정하지 마세요. */
@@ -272,7 +307,7 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 /* 보조 페이지 테이블(SPT)을 원본(src)에서 대상(dst)으로 복사합니다. */
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
-        struct supplemental_page_table *src UNUSED) {
+    struct supplemental_page_table *src UNUSED) {
     struct hash_elem *e;
     struct hash_iterator hash_iter;
 	bool succ = true;
@@ -289,7 +324,6 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
         bool writable = src_page->writable;
 		struct page *dst_page;
 
-		//aux값을 이렇게 넘길 수 있는지 의문
         switch (type){
             case VM_UNINIT:
                 if(!vm_alloc_page_with_initializer(src_page->uninit.type, upage, writable, src_page->uninit.init, src_page->uninit.aux)) succ = false;
@@ -332,7 +366,7 @@ static bool hash_less (const struct hash_elem *a,const struct hash_elem *b,void 
     struct page *pb = hash_entry(b, struct page, hash_elem);
 	return pa->va < pb->va;
 }
-
+//hash 삭제 함수
 void spt_destructor(struct hash_elem *e, void* aux){
     const struct page *p = hash_entry(e, struct page, hash_elem);
     destroy(p);
