@@ -9,10 +9,6 @@
 #include "threads/mmu.h"
 
 
-static bool hash_less (const struct hash_elem *a,
-						const struct hash_elem *b,void *aux);
-static unsigned
-page_hash(const struct hash_elem *e, void *aux UNUSED);
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void
@@ -285,14 +281,15 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 }
 
 //hash_hash 함수
-static unsigned
+unsigned
 page_hash(const struct hash_elem *e, void *aux UNUSED) {
     struct page *p = hash_entry(e, struct page, hash_elem);  // hash_elem → struct page
     return hash_bytes(pg_round_down(p->va), sizeof(p->va));  // va를 기준으로 해시값 생성
 }
 
 //hash 비교 함수
-static bool hash_less (const struct hash_elem *a,const struct hash_elem *b,void *aux){
+bool 
+hash_less (const struct hash_elem *a,const struct hash_elem *b,void *aux){
 	struct page *pa = hash_entry(a, struct page, hash_elem);
     struct page *pb = hash_entry(b, struct page, hash_elem);
 	return pg_round_down(pa->va) < pg_round_down(pb->va);

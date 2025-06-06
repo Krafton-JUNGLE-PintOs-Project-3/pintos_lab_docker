@@ -105,6 +105,13 @@ void vm_init (void);
 bool vm_try_handle_fault (struct intr_frame *f, void *addr, bool user,
 		bool write, bool not_present);
 
+//초기화
+bool 
+hash_less (const struct hash_elem *a,const struct hash_elem *b,void *aux);
+
+unsigned
+page_hash(const struct hash_elem *e, void *aux UNUSED);
+
 #define vm_alloc_page(type, upage, writable) \
 	vm_alloc_page_with_initializer ((type), (upage), (writable), NULL, NULL)
 bool vm_alloc_page_with_initializer (enum vm_type type, void *upage,

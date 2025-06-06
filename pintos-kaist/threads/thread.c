@@ -11,6 +11,8 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#include "include/vm/vm.h"
+#include "include/lib/kernel/hash.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -261,6 +263,13 @@ void wakeup_thread(int64_t tick) {
 		t = palloc_get_page (PAL_ZERO);
 		if (t == NULL)
 			return TID_ERROR;
+		
+		struct hash *spt_hash = malloc(sizeof(struct hash));
+		if (spt_hash == NULL){
+			;
+		}
+		t->spt.spt_hash = spt_hash;
+		
 
 		/* Initialize thread. */
 		init_thread (t, name, priority);
@@ -526,7 +535,8 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->wait_on_lock = NULL;
 	list_init(&(t->donations));
 	list_init(&(t->child_list));
-	
+	hash_init(&t->spt.spt_hash, page_hash, hash_less, NULL);
+
 	for(int i=0;i<127;i++){
 		t->file_table[i] = NULL;
 	}
