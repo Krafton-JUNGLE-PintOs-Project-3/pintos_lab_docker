@@ -762,7 +762,7 @@ install_page (void *upage, void *kpage, bool writable) {
    프로젝트 2에서만 해당 기능을 구현하고자 한다면,  
    위쪽 블록에 구현하세요. */
 
-static bool
+bool
 lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: 파일에서 세그먼트를 로드합니다. */
 	struct read_file *read_file_load = (struct read_file *)aux;
@@ -771,7 +771,7 @@ lazy_load_segment (struct page *page, void *aux) {
 	file_seek(read_file_load->file, read_file_load->ofs);
 	
 	if(file_read(read_file_load->file, page->frame->kva, read_file_load->page_read_bytes) != (int)read_file_load->page_read_bytes){
-		palloc_free_page(page->frame->kva);
+		// palloc_free_page(page->frame->kva);
 		return false;
 	}
 

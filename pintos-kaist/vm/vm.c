@@ -231,30 +231,6 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
     return false;
 }
 
-// bool
-// vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
-// 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-// 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
-// 	struct page *page = NULL;
-// 	struct thread *curr = thread_current(); //디버깅용
-	
-// 	if(addr == NULL || is_kernel_vaddr(addr)){
-// 		return false;
-// 	}
-
-// 	//스택에 접근하는 경우에 할당 - 스택에 접근하는 경우와 아닌 경우를 구별할 수 있어야 한다.
-// 	//스택 포인터 아래의 스택에 쓸 경우, 스택 포인터 아래 8바이트에 대해서 page fault를 발생시킬 수 있다.
-
-// 	if(not_present){
-// 		page = spt_find_page(spt, addr);
-// 		if(page == NULL){
-// 			return false;
-// 		}
-// 		return vm_do_claim_page (page);
-// 	}
-// 	return false;
-// }
-
 /* Free the page.
  * 이 함수는 수정하지 마세요. */
 void
