@@ -2,6 +2,7 @@
 #define VM_VM_H
 #include <stdbool.h>
 #include "threads/palloc.h"
+#include "include/lib/kernel/hash.h"
 
 enum vm_type {
 	/* page not initialized */
@@ -47,6 +48,7 @@ struct page {
 	
 	/* Your implementation */
 	struct hash_elem hash_elem; //hash_table에 page를 넣기 위한 구조체
+	bool writable;
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -57,7 +59,7 @@ struct page {
 #ifdef EFILESYS
 		struct page_cache page_cache;
 #endif
-	};
+	};	
 };
 
 /* The representation of "frame" */
@@ -86,7 +88,7 @@ struct page_operations {
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table {
-	struct hash *spt_hash;
+	struct hash *spt_hash; //va -> page mapping
 };
 
 #include "threads/thread.h"

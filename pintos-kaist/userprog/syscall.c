@@ -98,6 +98,10 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			f->R.rax=sys_remove(filename);
 			break;
 		}
+		case SYS_CLOSE:
+			sys_close((int)f->R.rdi);
+			break;
+			
 		case SYS_WRITE:{
 			int fd = (int)f->R.rdi;
 			void *buf = (void*)f->R.rsi;
@@ -349,6 +353,7 @@ sys_close(int fd){
 
 	lock_acquire(&file_lock);
 	file_close(file);	
+	cur->file_table[fd] = NULL;
 	lock_release(&file_lock);
 }
 

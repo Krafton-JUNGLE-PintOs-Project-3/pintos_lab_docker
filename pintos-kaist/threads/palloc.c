@@ -259,11 +259,16 @@ palloc_init (void) {
    then the pages are filled with zeros.  If too few pages are
    available, returns a null pointer, unless PAL_ASSERT is set in
    FLAGS, in which case the kernel panics. */
+/*page_cnt만큼의 페이지(연속된 RAM 공간)를 할당하여 그 시작주소를 반환
+사용자 영역, 커널 영역 풀중 어디에 할당할지 선택 가능*/
 void *
 palloc_get_multiple (enum palloc_flags flags, size_t page_cnt) {
 	struct pool *pool = flags & PAL_USER ? &user_pool : &kernel_pool;
 
 	lock_acquire (&pool->lock);
+	/*pool->used_map은 현재 풀에서 어떤 페이지가 사용중인지를 나타내는 비트맵
+	0부터 시작해서 page_cnt만큼 연속된 페이지를 찾아서 true로 바꿈
+	못찾으면 BITMAP_ERROR를 반환*/
 	size_t page_idx = bitmap_scan_and_flip (pool->used_map, 0, page_cnt, false);
 	lock_release (&pool->lock);
 	void *pages;

@@ -32,7 +32,7 @@ hash_init (struct hash *h,
 	h->aux = aux;
 
 	if (h->buckets != NULL) {
-		hash_clear (h, NULL);
+		hash_clear (h, NULL); //생성한 buckets을 초기화.
 		return true;
 	} else
 		return false;
@@ -91,11 +91,12 @@ hash_destroy (struct hash *h, hash_action_func *destructor) {
 struct hash_elem *
 hash_insert (struct hash *h, struct hash_elem *new) {
 	struct list *bucket = find_bucket (h, new);
+	/*같은 페이지를 갖는 hash_elem가 삽입되는것이 아닌지 확인*/
 	struct hash_elem *old = find_elem (h, bucket, new);
-
+	/*다른 페이지면 삽입*/
 	if (old == NULL)
 		insert_elem (h, bucket, new);
-
+	/*해시 테입블의 부하계수(load factor) 유지*/
 	rehash (h);
 
 	return old;
