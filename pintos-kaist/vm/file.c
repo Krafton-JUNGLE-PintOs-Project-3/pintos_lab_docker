@@ -4,6 +4,8 @@
 #include "threads/vaddr.h"
 #include "userprog/process.h"
 #include <string.h>
+#include "threads/thread.h"
+#include "threads/synch.h"
 static bool file_backed_swap_in (struct page *page, void *kva);
 static bool file_backed_swap_out (struct page *page);
 static void file_backed_destroy (struct page *page);
@@ -26,11 +28,6 @@ bool
 file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
 	
-	// // aux->file = page->uninit.;
-	// // aux->offset;
-	// // aux->read_bytes;
-	// // aux->zero_bytes;
-	// memset(&page->uninit, 0, sizeof(struct uninit_page));
 	page->operations = &file_ops;
 	
 	struct file_page *file_page = &page->file;
@@ -57,12 +54,14 @@ file_backed_swap_out (struct page *page) {
 /* Destory the file backed page. PAGE will be freed by the caller. */
 static void
 file_backed_destroy (struct page *page) {
+	// lock_acquire(&hash_lock);	
 	struct file_page *file_page = &page->file;
 	if(pml4_is_dirty(thread_current()->pml4,page->va)){
-		file_write_at(file_page->file,page->va,file_page->read_bytes,file_page->offset);
+		file_write_at(file_page->file, page->va, file_page->read_bytes, file_page->offset);
 	}
 	
-	 
+	// hash_destroy(&thread_current()->spt.spt_hash, spt_destructor);
+	// lock_release(&hash_lock);
 }
 
 /* Do the mmap */

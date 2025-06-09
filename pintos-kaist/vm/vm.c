@@ -86,7 +86,7 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	/* TODO: Fill this function. */
 	page->va =pg_round_down(va); // 탐색용 page에 va 넣고
 	struct hash_elem *e = hash_find(&spt->spt_hash, &page->hash_elem);//hash find안의 bucket find에서 해싱해줌
-	free(page);
+	// free(page);
 	if (e != NULL)
 		return hash_entry(e, struct page, hash_elem);
 	return NULL;
@@ -159,6 +159,7 @@ static void
 vm_stack_growth (void *addr UNUSED) {
 	struct thread *curr = thread_current();
 	void* stack_bottom = curr->stack_bottom;
+	// addr = pg_round_down(addr);
 	while (addr < stack_bottom){
 		stack_bottom -= PGSIZE;
 		if(vm_alloc_page_with_initializer (VM_ANON | VM_MARKER_0, stack_bottom, true, NULL, NULL))
