@@ -95,17 +95,12 @@ err:
 /* Find VA from spt and return page. On error, return NULL. */
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-	// struct page key;
-	struct page *page = malloc(sizeof(struct page));
+	struct page key;
 	/* TODO: Fill this function. */
-	// key.va = pg_round_down(va);
-	page->va = pg_round_down(va);
-	struct hash_elem *e = hash_find(spt->spt_hash, &page->hash_elem);
-	free(page);
+	key.va = pg_round_down(va);
+	struct hash_elem *e = hash_find(spt->spt_hash, &key.hash_elem);
 	if (e != NULL) {
-		struct page *page;
-		page = hash_entry(e, struct page, hash_elem);
-		return page;
+		return hash_entry(e, struct page, hash_elem);
 	}
 	return NULL;
 }
@@ -251,17 +246,23 @@ vm_do_claim_page (struct page *page) {
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	struct thread *cur = thread_current();
 	//bool succ = false;
+	if (!swap_in (page, frame->kva))
+        return false;
+	
 	if(pml4_get_page(cur->pml4, page->va) == NULL){
 		return pml4_set_page(cur->pml4, page->va, frame->kva, page->writable);
 		//succ = true;
 	}
 	// return false;
-	return swap_in (page, frame->kva);
+	
 }
 
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+	spt->spt_hash = malloc(sizeof(struct hash));
+	if (spt->spt_hash == NULL)
+		PANIC("Failed to allocate spt hash");
 	hash_init(spt->spt_hash,page_hash,hash_less,NULL);
 }
 
@@ -283,8 +284,10 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 //hash_hash 함수
 unsigned
 page_hash(const struct hash_elem *e, void *aux UNUSED) {
-    struct page *p = hash_entry(e, struct page, hash_elem);  // hash_elem → struct page
-    return hash_bytes(pg_round_down(p->va), sizeof(p->va));  // va를 기준으로 해시값 생성
+    const struct page *p = hash_entry (e, struct page, hash_elem);
+    uintptr_t addr = pg_round_down ((uintptr_t) p->va); /* ① 페이지 기준 주소값 */
+
+    return hash_int ((int) addr);                      /* ② 해시 계산 & 반환 */
 }
 
 //hash 비교 함수

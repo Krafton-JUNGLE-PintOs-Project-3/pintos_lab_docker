@@ -800,6 +800,9 @@ lazy_load_segment (struct page *page, void *aux) {
 	off_t offset = info->offset;
 	size_t read_bytes = info->read_bytes;
 	size_t zero_bytes = info->zero_bytes;
+	
+	struct load_info *li = aux;
+	file_seek (li->file, li->offset);
 
 	if (file_read (info->file, kva, read_bytes) != (int)read_bytes)
 		return false;
@@ -870,6 +873,16 @@ setup_stack (struct intr_frame *if_) {
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
+	/* 스택용 페이지를 SPT에 등록하고 곧바로 매핑 */
+	success = vm_alloc_page_with_initializer (VM_ANON | VM_MARKER_0,
+	                                          stack_bottom, true,
+	                                          NULL, NULL);
+	if (success)
+		success = vm_claim_page (stack_bottom);
+
+	/* 매핑이 끝났으면 초기 rsp 설정 */
+	if (success)
+		if_->rsp = USER_STACK;
 
 	return success;
 }
