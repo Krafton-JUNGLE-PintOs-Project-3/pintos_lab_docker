@@ -211,28 +211,39 @@ lock_init (struct lock *lock) {
    we need to sleep. */
 void
 lock_acquire (struct lock *lock) {
+	// enum intr_level old_level;
+	// old_level = intr_disable ();
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
 	struct thread *curr = thread_current();
-	if (lock->holder != NULL){
+	struct thread *prev_holder = lock->holder;
+
+	if (prev_holder != NULL){
 		curr->wait_on_lock = lock;
-		list_insert_ordered(&lock->holder->donations, &curr->donation_elem,
-							cmp_donate_priority, NULL);
+		list_insert_ordered(&prev_holder->donations, &curr->donation_elem, cmp_donate_priority, NULL);
 		int curr_priority = curr->priority; //current thread priority
-		struct thread *cur_holder;
-		while (curr->wait_on_lock != NULL){
-			cur_holder = curr->wait_on_lock->holder;
-			cur_holder->priority = curr_priority;
-			curr = cur_holder;
+		struct thread *holder = prev_holder;
+		while (holder->wait_on_lock != NULL){
+			holder->priority = curr_priority;
+			holder = holder->wait_on_lock->holder;
+			if (holder == NULL)
+					break;
 		}
+		if (holder != NULL)
+			holder->priority = curr_priority;
 	}
 	sema_down (&lock->semaphore);
 
+	if (prev_holder != NULL && curr->wait_on_lock != NULL){
+		list_remove(&curr->donation_elem);
+	}
+			
 	curr->wait_on_lock = NULL;
 
 	lock->holder = thread_current ();
+	// intr_set_level (old_level);
 }
 
 bool
@@ -251,6 +262,7 @@ cmp_donate_priority(const struct list_elem *a, const struct list_elem *b, void *
    interrupt handler. */
 bool
 lock_try_acquire (struct lock *lock) {
+
 	bool success;
 
 	ASSERT (lock != NULL);
@@ -268,37 +280,14 @@ lock_try_acquire (struct lock *lock) {
    An interrupt handler cannot acquire a lock, so it does not
    make sense to try to release a lock within an interrupt
    handler. */
-//    void
-// lock_release (struct lock *lock) {
-// 	ASSERT (lock != NULL);
-// 	ASSERT (lock_held_by_current_thread (lock));
-
-// //When the lock is released, remove the thread that holds the lock 
-// //on donation list and set priority properly.
-//    struct thread *t;
-//    t = lock->holder;
-// 	lock->holder = NULL;
-//    enum intr_level old_level = intr_disable();
-//    //donation 리스트 순회하면서 지금 wait_on_lock이 해제하는 lock인 애들을 remove list(d_elem)
-//    struct list_elem *cur_d_elem = list_begin (&t->donations);//리스트 시작지점
-//    struct list_elem *next_d_elem;
-//    while(cur_d_elem != list_end(&t->donations)){//도네이션 리스트 순회
-//       struct thread *cur_t = list_entry(cur_d_elem,struct thread, donation_elem);
-//       next_d_elem = list_next(cur_d_elem);
-//       if(cur_t->wait_on_lock == lock){
-//          list_remove(cur_d_elem);
-//          cur_t->wait_on_lock = NULL;
-//       }
-      
-//       cur_d_elem = next_d_elem;
-//    }
-//    update_donations_priority();
-// 	sema_up (&lock->semaphore);//세마 업 시에 선점을 하는데 sema업이 빠르면 바뀌지 않은 상태로 선점을 진행함 (언블럭 이후 선점함)
-//    intr_set_level (old_level);
-// }
 
 void
 lock_release (struct lock *lock) {
+	if(lock->holder == NULL){
+		return;
+	}
+	// enum intr_level old_level;
+	// old_level = intr_disable ();
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
 
@@ -306,6 +295,7 @@ lock_release (struct lock *lock) {
 	update_donations_priority();
 
 	lock->holder = NULL;
+	// intr_set_level (old_level);
 	sema_up (&lock->semaphore);
 }
 
@@ -318,9 +308,16 @@ remove_donor(struct lock *lock) {
         struct thread *t = list_entry(e, struct thread, donation_elem);
         struct list_elem *next = list_next(e);
 
-        if (t->wait_on_lock == lock)
-            list_remove(e);
-
+		// if (t->wait_on_lock == lock) {
+		// 	list_remove(e);
+		// 	t->wait_on_lock = NULL;
+        // }
+		if (t->wait_on_lock == lock) {
+			list_remove(e);
+			// t->donation_elem.prev = NULL;
+            // t->donation_elem.next = NULL;
+			t->wait_on_lock = NULL;
+        }
         e = next;
     }
 }

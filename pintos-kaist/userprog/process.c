@@ -18,6 +18,7 @@
 #include "threads/thread.h"
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 #include "intrinsic.h"
 #ifdef VM
 #include "vm/vm.h"
@@ -354,8 +355,10 @@ process_wait (tid_t child_tid UNUSED) {
 
 	struct thread *cur = thread_current();
 	struct list_elem *e;
-	if (child_tid == NULL)
+	if (child_tid == NULL){
+		// printf("wait_exit\n");
 		return -1;
+	}	
 	for(e=list_begin(&cur->child_list); e!=list_tail(&cur->child_list);
 		e=list_next(e)){
 			struct child *c = list_entry(e, struct child, elem);
@@ -368,6 +371,7 @@ process_wait (tid_t child_tid UNUSED) {
 				return result_status;
 			}
 	}
+	// printf("wait_exit\n");
 	return -1;
 	
 }
@@ -389,7 +393,7 @@ process_exit (void) {
 		free(ci);
 
 	}
-
+	// lock_acquire(&filesys_lock);
 	struct file** ft = curr->file_table;
 	for(int i=0;i<127;i++){
 		if(ft[i]==NULL){
@@ -399,8 +403,9 @@ process_exit (void) {
 	}
 
 	if (curr->run_file){
-		file_close (curr->run_file);
+		file_close (curr->run_file);	
 	}
+	// lock_release(&filesys_lock);
     process_cleanup ();
 }
 
@@ -521,6 +526,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	process_activate (thread_current ());
 
 	/* Open executable file. */
+	lock_acquire(&file_lock);
 	file = filesys_open (file_name);
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", file_name);
@@ -611,6 +617,7 @@ load (const char *file_name, struct intr_frame *if_) {
 
 done:
 	/* We arrive here whether the load is successful or not. */
+	lock_release(&file_lock);
 	return success;
 }
 
@@ -776,13 +783,13 @@ lazy_load_segment (struct page *page, void *aux) {
 	size_t page_zero_bytes = info->zero_bytes;
 
 
-	// lock_acquire(&file_lock);
+	lock_acquire(&file_lock);
 	if (file_read_at(info->file, kva, page_read_bytes, offset) != (int)page_read_bytes){
-		// lock_release(&file_lock);
+		lock_release(&file_lock);
 		return false;
 	}
+	lock_release(&file_lock);
 	memset(kva + page_read_bytes, 0, page_zero_bytes);
-	// lock_release(&file_lock);
 	return true;
 }
 
@@ -824,8 +831,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		aux->offset = ofs;
 		aux->read_bytes = page_read_bytes;
 		aux->zero_bytes = page_zero_bytes;
-		
-		if (!vm_alloc_page_with_initializer (VM_FILE, upage,
+		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
 					writable, lazy_load_segment, aux))
 			return false;
 
@@ -849,9 +855,9 @@ setup_stack (struct intr_frame *if_) {
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
 	if (vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, true)) {
-		thread_current()->stack_bottom = stack_bottom;
 		if (vm_claim_page(stack_bottom)) {
 			if_->rsp = USER_STACK;
+			thread_current()->stack_bottom = stack_bottom;
 			success = true;
 		}
 	}

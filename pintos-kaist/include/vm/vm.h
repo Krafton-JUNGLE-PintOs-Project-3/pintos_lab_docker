@@ -2,6 +2,8 @@
 #define VM_VM_H
 #include <stdbool.h>
 #include "threads/palloc.h"
+#include "threads/synch.h"
+#include "list.h"
 
 enum vm_type {
 	/* page not initialized */
@@ -65,6 +67,7 @@ struct page {
 struct frame {
 	void *kva;//커널 가상 주소
 	struct page *page;//매핑된 페이지
+	struct list_elem frame_elem; //프레임 리스트 원소.
 };
 
 /* The function table for page operations.

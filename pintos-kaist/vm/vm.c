@@ -10,12 +10,15 @@
 static unsigned page_hash(const struct hash_elem *e, void *aux UNUSED);
 static bool hash_less (const struct hash_elem *a,const struct hash_elem *b,void *aux);
 void spt_destructor(struct hash_elem *e, void* aux);
+struct list frame_table;
+struct lock hash_lock;
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void
 vm_init (void) {
 	vm_anon_init ();
 	vm_file_init ();
+	list_init(&frame_table);
 	lock_init(&hash_lock);
 #ifdef EFILESYS  /* For project 4 */
 	pagecache_init ();
@@ -85,9 +88,9 @@ struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page page;
 	/* TODO: Fill this function. */
-	page.va =pg_round_down(va); // 탐색용 page에 va 넣고
+	page.va = pg_round_down(va); // 탐색용 page에 va 넣고
 	struct hash_elem *e = hash_find(&spt->spt_hash, &page.hash_elem);//hash find안의 bucket find에서 해싱해줌
-	// free(page);
+	// free(&page);
 	if (e != NULL)
 		return hash_entry(e, struct page, hash_elem);
 	return NULL;
@@ -119,7 +122,8 @@ static struct frame *
 vm_get_victim (void) {
 	struct frame *victim = NULL;
 	 /* TODO: The policy for eviction is up to you. */
-
+	struct list_elem *e = list_pop_front(&frame_table);
+	victim = list_entry(e, struct frame, frame_elem);
 	return victim;
 }
 
@@ -127,10 +131,15 @@ vm_get_victim (void) {
  * Return NULL on error.*/
 static struct frame *
 vm_evict_frame (void) {
-	struct frame *victim UNUSED = vm_get_victim ();
+	struct frame *victim = vm_get_victim ();
 	/* TODO: swap out the victim and return the evicted frame. */
+	if (victim == NULL) return NULL;
+	struct page *page = victim->page;
 
-	return NULL;
+	if (page == NULL) return NULL;
+    if (!swap_out(page)) return NULL;
+
+	return victim; 
 }
 
 /* palloc() and get frame. If there is no available page, evict the page
@@ -139,18 +148,22 @@ vm_evict_frame (void) {
  * space.*/
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = NULL;
-	/* TODO: Fill this function. */
-	frame = malloc(sizeof(struct frame));
-	if (frame == NULL)
-		PANIC("vm_get_frame: malloc failed");
-	void *kva= palloc_get_page(PAL_USER);//
-	if(kva == NULL){
-		frame = vm_evict_frame();
+
+	void *kva = palloc_get_page (PAL_USER);
+    struct frame *frame;
+	if (kva == NULL) {
+		frame = vm_evict_frame ();     /* Reuse an evicted frame. */
+		if (frame == NULL)
+			PANIC ("vm_get_frame: eviction failed");
+			/* The victim already has a kernel page. */
+		kva = frame->kva;
+	} else {
+		frame = malloc (sizeof *frame);
+
+		if (frame == NULL)
+			PANIC ("vm_get_frame: malloc failed");
 	}
-
-
-	frame->kva = kva;      // 커널 가상 주소 저장
+	frame->kva = kva;      /* Kernel virtual address */
 	frame->page = NULL;
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
@@ -186,25 +199,21 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
-	if (addr == NULL||is_kernel_vaddr(addr))
-    	return false;
-	// page = spt_find_page(spt, addr);
-	// if (write && !page->page_writable){
-	// 	return false;
-	// }
-
-	if(addr >= (f->rsp - 8) && (addr <= thread_current ()->stack_bottom) && addr >= (USER_STACK - 0x1000000)){
-	vm_stack_growth(addr);
-	}
-	page = spt_find_page(spt, addr);
-	if (!page || (write && !page->page_writable)){
+	if (addr == NULL || is_kernel_vaddr(addr)){
 		return false;
-	}
-		
-	return vm_do_claim_page(page);
+	} 	
 
-	
-    return true;
+	if(not_present){
+		if(addr >= (f->rsp - 8) && (addr <= thread_current ()->stack_bottom) && addr >= (USER_STACK - 0x1000000)){
+			vm_stack_growth(addr);
+		}
+		page = spt_find_page(spt, addr);
+		if (!page || (write && !page->page_writable)){
+			return false;
+		}	
+		return vm_do_claim_page(page);
+	}
+    return false;
 }
 
 /* Free the page.
@@ -238,10 +247,11 @@ vm_do_claim_page (struct page *page) {
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	if(pml4_get_page(thread_current()->pml4,page->va)==NULL){//va에 대해 해당하는 물리페이지가 pml4에 매핑이 안되어있으면.
-		if(!pml4_set_page(thread_current()->pml4,page->va,frame->kva,page->page_writable))return false;
+		if(!pml4_set_page(thread_current()->pml4, page->va, frame->kva, page->page_writable))return false;
 	}
-	// return true;
+
 	bool ok = swap_in (page, frame->kva);
+	list_push_back(&frame_table, &frame->frame_elem);
 	return ok;
 }
 
@@ -268,7 +278,6 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
         bool writable = src_page->page_writable;
 		struct page *dst_page;
 
-		//aux값을 이렇게 넘길 수 있는지 의문
         switch (type){
             case VM_UNINIT:{
 

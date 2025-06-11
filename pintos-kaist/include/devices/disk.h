@@ -4,7 +4,7 @@
 #include <inttypes.h>
 #include <stdint.h>
 
-/* Size of a disk sector in bytes. */
+/* 디스크 섹터의 바이트 단위 크기. */
 #define DISK_SECTOR_SIZE 512
 
 /* Index of a disk sector within a disk.

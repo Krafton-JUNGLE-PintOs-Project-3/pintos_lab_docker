@@ -4,6 +4,7 @@
 #include <random.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -378,7 +379,6 @@ cmp_priority(const struct list_elem *a, const struct list_elem *b,
 		// printf("User programm try process exit\n");
 		process_exit ();
 	#endif
-
 		/* Just set our status to dying and schedule another process.
 		We will be destroyed during the call to schedule_tail(). */
 		intr_disable ();

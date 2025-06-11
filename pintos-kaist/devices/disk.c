@@ -8,10 +8,10 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 
-/* The code in this file is an interface to an ATA (IDE)
-   controller.  It attempts to comply to [ATA-3]. */
+/* 이 파일의 코드는 ATA(IDE) 컨트롤러에 대한 인터페이스입니다. 
+[ATA-3] 규격을 준수하려고 시도합니다. */
 
-/* ATA command block port addresses. */
+/* **ATA 명령 블록 포트 주소(ATA Command Block Port Addresses)*. */
 #define reg_data(CHANNEL) ((CHANNEL)->reg_base + 0)     /* Data. */
 #define reg_error(CHANNEL) ((CHANNEL)->reg_base + 1)    /* Error. */
 #define reg_nsect(CHANNEL) ((CHANNEL)->reg_base + 2)    /* Sector Count. */
@@ -22,13 +22,13 @@
 #define reg_status(CHANNEL) ((CHANNEL)->reg_base + 7)   /* Status (r/o). */
 #define reg_command(CHANNEL) reg_status (CHANNEL)       /* Command (w/o). */
 
-/* ATA control block port addresses.
-   (If we supported non-legacy ATA controllers this would not be
-   flexible enough, but it's fine for what we do.) */
+/* ATA 제어 블록 포트 주소
+(우리가 구식 ATA 컨트롤러만 지원하는 경우에는 
+이 방식이 충분하지 않겠지만, 우리가 하는 작업에는 이 정도면 충분하다.) */
 #define reg_ctl(CHANNEL) ((CHANNEL)->reg_base + 0x206)  /* Control (w/o). */
 #define reg_alt_status(CHANNEL) reg_ctl (CHANNEL)       /* Alt Status (r/o). */
 
-/* Alternate Status Register bits. */
+/* 대체 상태 레지스터 비트(Alternate Status Register bits). */
 #define STA_BSY 0x80            /* Busy. */
 #define STA_DRDY 0x40           /* Device Ready. */
 #define STA_DRQ 0x08            /* Data Request. */
@@ -173,8 +173,7 @@ disk_print_stats (void) {
 	}
 }
 
-/* Returns the disk numbered DEV_NO--either 0 or 1 for master or
-   slave, respectively--within the channel numbered CHAN_NO.
+/* CHAN_NO로 지정된 채널 내에서 DEV_NO에 해당하는 디스크(마스터는 0, 슬레이브는 1)를 반환합니다.
 
    Pintos uses disks this way:
 0:0 - boot loader, command line args, and operating system kernel
@@ -194,8 +193,7 @@ disk_get (int chan_no, int dev_no) {
 	return NULL;
 }
 
-/* Returns the size of disk D, measured in DISK_SECTOR_SIZE-byte
-   sectors. */
+/* 디스크 D의 크기를 DISK_SECTOR_SIZE 바이트 단위의 섹터(sector)로 측정하여 반환합니다.. */
 disk_sector_t
 disk_size (struct disk *d) {
 	ASSERT (d != NULL);

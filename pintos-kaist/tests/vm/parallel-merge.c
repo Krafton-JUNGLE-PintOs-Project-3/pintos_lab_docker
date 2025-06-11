@@ -1,7 +1,6 @@
-/* Generates about 1 MB of random data that is then divided into
-   16 chunks.  A separate subprocess sorts each chunk; the
-   subprocesses run in parallel.  Then we merge the chunks and
-   verify that the result is what it should be. */
+/* 약 1MB의 무작위 데이터를 생성한 후, 이를 16개의 청크로 나눕니다.
+   각 청크는 별도의 하위 프로세스가 정렬하며, 이 하위 프로세스들은 병렬로 실행됩니다.
+   그 후, 이 청크들을 병합하고 결과가 올바른지 확인합니다. */
 
 #include "tests/vm/parallel-merge.h"
 #include <stdio.h>
@@ -10,15 +9,15 @@
 #include "tests/lib.h"
 #include "tests/main.h"
 
-#define CHUNK_SIZE (128 * 1024)
+#define CHUNK_SIZE (128 * 1024)                  //131072??
 #define CHUNK_CNT 8                             /* Number of chunks. */
-#define DATA_SIZE (CHUNK_CNT * CHUNK_SIZE)      /* Buffer size. */
+#define DATA_SIZE (CHUNK_CNT * CHUNK_SIZE)      /* Buffer size. */  //1048576??
 
 unsigned char buf1[DATA_SIZE], buf2[DATA_SIZE];
 size_t histogram[256];
 
-/* Initialize buf1 with random data,
-   then count the number of instances of each value within it. */
+/* buf1을 무작위 데이터로 초기화한 다음,
+   그 안에 포함된 각 값이 몇 번씩 나타나는지를 계산합니다. */
 static void
 init (void)
 {
@@ -33,8 +32,8 @@ init (void)
     histogram[buf1[i]]++;
 }
 
-/* Sort each chunk of buf1 using SUBPROCESS,
-   which is expected to return EXIT_STATUS. */
+/* buf1의 각 청크를 SUBPROCESS를 사용해 정렬하며,
+  이 SUBPROCESS는 EXIT_STATUS 값을 반환할 것으로 예상됩니다. */
 static void
 sort_chunks (const char *subprocess, int exit_status)
 {
@@ -82,7 +81,7 @@ sort_chunks (const char *subprocess, int exit_status)
     }
 }
 
-/* Merge the sorted chunks in buf1 into a fully sorted buf2. */
+/* buf1에 있는 정렬된 조각들을 병합하여 완전히 정렬된 buf2를 만듭니다. */
 static void
 merge (void)
 {
@@ -111,8 +110,8 @@ merge (void)
       /* Append value to buf2. */
       *op++ = *mp[min];
 
-      /* Advance merge pointer.
-         Delete this chunk from the set if it's emptied. */
+      /* 병합 포인터를 앞으로 이동시킵니다.
+         이 조각(chunk)이 비어 있으면 집합(set)에서 삭제합니다. */
       if ((++mp[min] - buf1) % CHUNK_SIZE == 0)
         mp[min] = mp[--mp_left];
     }
