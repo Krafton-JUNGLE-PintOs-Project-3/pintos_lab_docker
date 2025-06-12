@@ -8,8 +8,8 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 
-/* The code in this file is an interface to an ATA (IDE)
-   controller.  It attempts to comply to [ATA-3]. */
+/* 이 파일의 코드는 ATA(IDE) 컨트롤러에 대한 인터페이스입니다. 
+   [ATA-3]을 준수하려고 합니다. */
 
 /* ATA command block port addresses. */
 #define reg_data(CHANNEL) ((CHANNEL)->reg_base + 0)     /* Data. */

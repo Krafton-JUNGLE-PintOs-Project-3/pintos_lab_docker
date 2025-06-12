@@ -16,6 +16,9 @@
 #include <stdio.h>
 #include "threads/thread.h"
 
+#include "include/vm/vm.h"
+
+
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
@@ -32,8 +35,10 @@ bool sys_create(char*filename, unsigned size);
 int sys_open(char *filename);
 bool sys_remove(char *filename);
 int sys_filesize(int fd);
+static void check_writable_range(void *addr, size_t size);
 
-
+void *sys_mmap (void *addr, size_t length, int writable, int fd, off_t offset);
+void sys_munmap (void *addr);
 
 /* System call.
  *
@@ -60,7 +65,6 @@ syscall_init (void) {
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 
-	// lock_init(&file_lock);
 }
 
 /* The main system call interface */
@@ -75,9 +79,10 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			sys_halt();
 			break;
 		}
-		case SYS_EXIT:
+		case SYS_EXIT:{
 			sys_exit(f->R.rdi);
 			break;
+		}
 		case SYS_EXEC:{
 			int result = sys_exec(f->R.rdi);
 			if(result == -1)
@@ -85,9 +90,10 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			f->R.rax = result;	
 			break;
 		}
-		case SYS_WAIT:
+		case SYS_WAIT:{
 			f->R.rax = sys_wait(f->R.rdi);
 			break;
+		}
 		case SYS_OPEN:{
 			char * filename = (char*)f->R.rdi;
 			f->R.rax = sys_open(filename);
@@ -135,10 +141,26 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			f->R.rax = sys_tell((int)f->R.rdi);
 			break;
 		}
-	}
+		case SYS_CLOSE: {
+			int fd = (int) f->R.rdi;
+			sys_close(fd);
+			break;
+		}
+		case SYS_MMAP: {
+			f->R.rax = sys_mmap((void *)f->R.rdi, (size_t)f->R.rsi, (int)f->R.rdx, (int)f->R.r10, (off_t)f->R.r8);
+			break;
+		}
+		case SYS_MUNMAP: {
+			sys_munmap((void *)f->R.rdi);
+			break;
+		}
 
-	// thread_exit ();
+		default:
+            sys_exit(-1);	
+	}
 }
+
+
 
 void
 sys_halt(void){
@@ -153,13 +175,9 @@ sys_wait(tid_t pid){
 int
 sys_exec(const char *file){
 
-	struct thread* curr = thread_current();
-	
-	if(!is_user_vaddr(file) || pml4_get_page(curr->pml4, file) ==NULL || file == NULL){
-		sys_exit(-1);
-	}
-	
-	char *file_name = palloc_get_page(4);
+	check_address(file);
+
+	char *file_name = palloc_get_page(PAL_ZERO);
 	if (file_name == NULL){
 		palloc_free_page(file_name);
 		file_name = NULL;
@@ -179,10 +197,7 @@ sys_exec(const char *file){
 tid_t
 sys_fork(char *thread_name, struct intr_frame *if_){
 
-	struct thread * curr = thread_current();
-	if(!is_user_vaddr(thread_name) || pml4_get_page(curr->pml4, thread_name) ==NULL || thread_name == NULL){
-		sys_exit(-1);
-	}
+	check_address(thread_name);
 
 	tid_t child_tid = process_fork(thread_name, if_);
 	
@@ -195,10 +210,8 @@ sys_fork(char *thread_name, struct intr_frame *if_){
 
 bool
 sys_create(char* filename, unsigned size){
-	struct thread* curr = thread_current();
-	if(!is_user_vaddr(filename) || pml4_get_page(curr->pml4, filename) ==NULL || filename == NULL){
-		sys_exit(-1);
-	}
+
+	check_address(filename);
 
 	if(strlen(filename) > 14) return 0;
 
@@ -211,10 +224,8 @@ sys_create(char* filename, unsigned size){
 
 int
 sys_open(char* filename){
-	struct thread * curr = thread_current();
-	if(filename == NULL || !is_user_vaddr(filename) || pml4_get_page(curr->pml4, filename) == NULL ){
-		sys_exit(-1);
-	}
+
+	check_address(filename);
 
 	struct thread *cur = thread_current();
 	//file descriptor 할당
@@ -223,13 +234,11 @@ sys_open(char* filename){
 		return -1;
 	}
     
-	// enum intr_level old = intr_disable();
 	lock_acquire(&file_lock);
 	struct file* file = filesys_open(filename);
 	lock_release(&file_lock);
-	// intr_set_level(old);
+
 	if(file == NULL){
-		// sys_exit(-1);
 		return -1;
 	}
 	
@@ -271,10 +280,13 @@ sys_read(int fd, void *buffer, size_t size){
 		return 0;
 	}
 
-	if(buffer == NULL || !is_user_vaddr(buffer) || pml4_get_page(curr->pml4, buffer)==NULL){
+	check_address(buffer);
+
+	struct page *page = spt_find_page(&curr->spt, buffer);
+    if (page && !page->writable){
 		sys_exit(-1);
 	}
-
+	
 	if((fd<0) || (fd>=127)){
 		return -1;
 	}
@@ -304,13 +316,9 @@ sys_read(int fd, void *buffer, size_t size){
 
 int
 sys_write(int fd, void* buf, size_t size){
-	struct thread *curr = thread_current();
-	if(buf == NULL){
-		sys_exit(-1);
-	}
-	if(!is_user_vaddr(buf) || pml4_get_page(curr->pml4, buf)==NULL){
-		sys_exit(-1);
-	}
+
+	check_address(buf);
+	
 	if((fd<=0) || (fd>=127)){
 		return -1;
 	}
@@ -350,14 +358,13 @@ sys_close(int fd){
 	lock_acquire(&file_lock);
 	file_close(file);	
 	lock_release(&file_lock);
+	cur->file_table[fd] = NULL;
 }
 
 bool
 sys_remove(char* filename){
-	struct thread* curr = thread_current();
-	if(!is_user_vaddr(filename) || pml4_get_page(curr->pml4, filename) == NULL){
-		sys_exit(-1);
-	}
+
+	check_address(filename);
 
 	lock_acquire(&file_lock);
 	int result = filesys_remove(filename);
@@ -381,3 +388,92 @@ sys_tell(int fd){
 		return (unsigned)-1;
 	file_tell(f);
 }
+
+// void *addr, size_t length, int writable, struct file *file, off_t offset
+void *sys_mmap (void *addr, size_t length, int writable, int fd, off_t offset){
+	//유효성 검사를 다해야 할듯
+	//fd로 열린 파일의 오프셋 바이트부터 length 바이트 만큼을 프로세스의 가상주소 공간의 주소 addr에 매핑한다.
+	//전체 파일은 addr에서 시작하는 연속 가상 페이지에 매핑된다.
+	check_address(addr);
+	
+	if(fd == 0 || fd == 1){
+		return NULL;
+	}
+
+	
+	if((uintptr_t)addr % 4096 != 0){
+		return NULL;
+	}
+
+	struct thread *curr = thread_current();
+	struct page *check = spt_find_page(&curr->spt, addr);	
+	if (check != NULL) return NULL; // 중복 매핑 방지	
+
+	struct file* open_file = is_open_file(curr, fd);
+	if(open_file == NULL || length == 0){
+		return NULL;
+	}
+	
+	// lock_acquire(&file_lock);
+	struct file *reopen_file = file_reopen(open_file); //각 매핑에 대해 파일에 대한 별도의 독립적인 참조를 얻으려면 이 함수를 사용해야합니다.
+	// lock_release(&file_lock);
+    if (reopen_file == NULL) {
+        return NULL;
+    }
+
+	return do_mmap(addr, length, writable, reopen_file, offset);
+}
+
+
+void sys_munmap (void *addr){
+	check_address(addr);
+
+	struct thread *curr = thread_current();
+	struct page *check = spt_find_page(&curr->spt, addr);	
+	if (check == NULL) return; // 이미 없으면?	
+
+	do_munmap(addr);
+}
+
+
+
+
+
+
+#ifndef VM
+void check_address(void *addr){
+	struct thread *curr = thread_current();
+
+	if(!is_user_vaddr(addr) || addr == NULL ||pml4_get_page(curr->pml4, addr) == NULL){
+		sys_exit(-1);
+	}
+}
+#else
+
+static void
+check_writable_range(void *addr, size_t size) {
+	uint8_t *ptr = addr;
+	struct thread *curr = thread_current();
+	struct supplemental_page_table *spt = &curr->spt;
+
+	for (size_t i = 0; i < size; i + PGSIZE) {
+		struct page *page = spt_find_page(spt, ptr + i);
+		if (page == NULL || !page->writable) {
+			sys_exit(-1);  // 보안 위반 시 즉시 종료
+		}
+	}
+}
+
+void check_address(void *addr){
+	struct thread *curr = thread_current();
+
+	if(!is_user_vaddr(addr) || addr == NULL){
+		sys_exit(-1);
+	}
+
+	// if(pml4_get_page(curr->pml4, addr) == NULL){
+	// 	return;
+	// }
+}
+
+#endif

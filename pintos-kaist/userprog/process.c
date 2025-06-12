@@ -40,20 +40,19 @@ process_init (void) {
 	struct thread *current = thread_current ();
 }
 
-/* Starts the first userland program, called "initd", loaded from FILE_NAME.
- * The new thread may be scheduled (and may even exit)
- * before process_create_initd() returns. Returns the initd's
- * thread id, or TID_ERROR if the thread cannot be created.
- * Notice that THIS SHOULD BE CALLED ONCE. */
+/* FILE_NAME에서 로드된 "initd"라는 첫 번째 사용자 영역 프로그램을 시작합니다.  
+   새로 생성된 스레드는 process_create_initd()가 반환되기 전에  
+   스케줄링되거나 심지어 종료될 수도 있습니다.  
+   initd의 스레드 ID를 반환하며, 스레드를 생성할 수 없을 경우 TID_ERROR를 반환합니다.  
+   ※ 이 함수는 **한 번만 호출되어야 합니다. */
 tid_t
 process_create_initd (const char *file_name) {
 	char *fn_copy;
 	tid_t tid;
 
-	// printf("%s", *file_name);
-
 	/* Make a copy of FILE_NAME.
-	 * Otherwise there's a race between the caller and load(). */
+	 * 그렇지 않으면 호출자와 load() 함수 사이에  
+       레이스 조건(race condition)이 발생할 수 있습니다.*/
 	fn_copy = palloc_get_page (0);
 	if (fn_copy == NULL)
 		return TID_ERROR;
@@ -62,7 +61,7 @@ process_create_initd (const char *file_name) {
 	char *save_ptr;
 	char * name = strtok_r(file_name, " ", &save_ptr);
 
-	/* Create a new thread to execute FILE_NAME. */
+	/* FILE_NAME을 실행할 새로운 스레드를 생성합니다. */
 	tid = thread_create (name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR){
 		palloc_free_page (fn_copy);
@@ -71,7 +70,7 @@ process_create_initd (const char *file_name) {
 	return tid;
 }
 
-/* A thread function that launches first user process. */
+/* 첫 번째 사용자 프로세스를 실행하는 스레드 함수입니다. */
 static void
 initd (void *f_name) {
 #ifdef VM
@@ -85,11 +84,12 @@ initd (void *f_name) {
 	NOT_REACHED ();
 }
 
-/* Clones the current process as `name`. Returns the new process's thread id, or
- * TID_ERROR if the thread cannot be created. */
+/* 현재 프로세스를 `name`이라는 이름으로 복제(clone)합니다.  
+   새로운 프로세스의 스레드 ID를 반환하며,  
+   스레드를 생성할 수 없는 경우에는 TID_ERROR를 반환합니다. */
 tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
-	/* Clone current thread to new thread.*/ 
+	/* 현재 스레드를 새로운 스레드로 복제합니다. */ 
 	struct thread *cur = thread_current();
 
 	struct fork_aux* aux = malloc(sizeof(struct fork_aux));
@@ -122,8 +122,8 @@ process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 }
 
 #ifndef VM
-/* Duplicate the parent's address space by passing this function to the
- * pml4_for_each. This is only for the project 2. */
+/* 이 함수를 `pml4_for_each`에 전달하여 부모의 주소 공간(address space)을 복제합니다.  
+   이 기능은 프로젝트 2에서만 사용됩니다. */
 static bool
 duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	struct thread *current = thread_current ();
@@ -168,7 +168,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 }
 #endif
 
-/* A thread function that copies parent's execution context.
+/* 부모의 실행 컨텍스트를 복사하는 스레드 함수입니다.
  * Hint) parent->tf does not hold the userland context of the process.
  *       That is, you are required to pass second argument of process_fork to
  *       this function. */
@@ -250,16 +250,17 @@ init_parse(char *parse[]){
 	}
 }
 
-/* Switch the current execution context to the f_name.
- * Returns -1 on fail. */
+/* 현재 실행 컨텍스트를 f_name으로 전환합니다.  
+   실패할 경우 -1을 반환합니다. */
 int
 process_exec (void *f_name) {
 	char *file_name = f_name;
 	bool success;
 
-	/* We cannot use the intr_frame in the thread structure.
-	 * This is because when current thread rescheduled,
-	 * it stores the execution information to the member. */
+	/* 스레드 구조체 내의 `intr_frame`을 사용할 수 없습니다.  
+	   그 이유는 현재 스레드가 리스케줄될 때,  
+	   해당 멤버에 실행 정보를 저장하기 때문입니다. */
+	struct thread *curr = thread_current(); 
 	struct intr_frame _if;
 	_if.ds = _if.es = _if.ss = SEL_UDSEG;
 	_if.cs = SEL_UCSEG;
@@ -267,9 +268,8 @@ process_exec (void *f_name) {
 
 	/* We first kill the current context */
 	process_cleanup ();
-
-	// printf("%s\n", *file_name);
-
+	supplemental_page_table_init(&thread_current()->spt);
+ 
 	char *save_ptr;
 	char* parse[64];
 
@@ -320,17 +320,14 @@ process_exec (void *f_name) {
 	
 	_if.rsp -= sizeof(void *);
 	memset(_if.rsp, 0, sizeof(char *));
-
-
-	/* If load failed, quit. */
-	// palloc_free_page (file_name);
-	// if (!success)
-	// 	return -1;
+	
+	// curr->stack_bottom = _if.rsp;	//유저 모드에서 커널 모드로 전환 시 rsp를 thread에 저장한다.
 
 	palloc_free_page (file_name);
 	file_name = NULL;
 
 	/* Start switched process. */
+	
 	do_iret (&_if);
 	NOT_REACHED ();
 }
@@ -413,31 +410,34 @@ process_cleanup (void) {
 #endif
 
 	uint64_t *pml4;
-	/* Destroy the current process's page directory and switch back
-	 * to the kernel-only page directory. */
+	/* 현재 프로세스의 페이지 디렉터리를 제거하고,  
+	   커널 전용 페이지 디렉터리로 전환합니다. */
 	pml4 = curr->pml4;
 	if (pml4 != NULL) {
-		/* Correct ordering here is crucial.  We must set
-		 * cur->pagedir to NULL before switching page directories,
-		 * so that a timer interrupt can't switch back to the
-		 * process page directory.  We must activate the base page
-		 * directory before destroying the process's page
-		 * directory, or our active page directory will be one
-		 * that's been freed (and cleared). */
+		/* C여기에서 올바른 순서대로 수행하는 것이 매우 중요합니다.  
+		   타이머 인터럽트가 프로세스의 페이지 디렉터리로  
+		   다시 전환하지 않도록,  
+		   페이지 디렉터리를 전환하기 전에  
+		   `cur->pagedir`을 NULL로 설정해야 합니다.  
+
+		   또한, 프로세스의 페이지 디렉터리를 제거하기 전에  
+		   기본(base) 페이지 디렉터리를 활성화해야 합니다.  
+		   그렇지 않으면 활성 페이지 디렉터리가  
+		   이미 해제(그리고 초기화)된 디렉터리가 될 수 있습니다. */
 		curr->pml4 = NULL;
 		pml4_activate (NULL);
 		pml4_destroy (pml4);
 	}
 }
 
-/* Sets up the CPU for running user code in the nest thread.
- * This function is called on every context switch. */
+/* 다음 스레드에서 사용자 코드를 실행할 수 있도록 CPU를 설정합니다.  
+   이 함수는 컨텍스트 스위치가 발생할 때마다 호출됩니다.*/
 void
 process_activate (struct thread *next) {
-	/* Activate thread's page tables. */
+	/* 스레드의 페이지 테이블을 활성화합니다. */
 	pml4_activate (next->pml4);
 
-	/* Set thread's kernel stack for use in processing interrupts. */
+	/* 인터럽트를 처리하는 데 사용할 스레드의 커널 스택을 설정합니다. */
 	tss_update (next);
 }
 
@@ -460,8 +460,8 @@ process_activate (struct thread *next) {
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-/* Executable header.  See [ELF1] 1-4 to 1-8.
- * This appears at the very beginning of an ELF binary. */
+/* 실행 파일 헤더입니다. [ELF1] 1-4부터 1-8까지를 참조하세요.
+   ELF 바이너리의 맨 처음에 나타납니다 */
 struct ELF64_hdr {
 	unsigned char e_ident[EI_NIDENT];
 	uint16_t e_type;
@@ -500,10 +500,10 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes,
 		bool writable);
 
-/* Loads an ELF executable from FILE_NAME into the current thread.
- * Stores the executable's entry point into *RIP
- * and its initial stack pointer into *RSP.
- * Returns true if successful, false otherwise. */
+/* 현재 스레드에 FILE_NAME으로부터 ELF 실행 파일을 로드합니다.  
+   실행 파일의 진입 지점(entry point)은 *RIP에 저장하고,  
+   초기 스택 포인터는 *RSP에 저장합니다.  
+   성공 시 true를, 실패 시 false를 반환합니다. */
 static bool
 load (const char *file_name, struct intr_frame *if_) {
 	struct thread *t = thread_current ();
@@ -513,13 +513,13 @@ load (const char *file_name, struct intr_frame *if_) {
 	bool success = false;
 	int i;
 
-	/* Allocate and activate page directory. */
+	/* 페이지 디렉터리를 할당하고 활성화합니다. */
 	t->pml4 = pml4_create ();
 	if (t->pml4 == NULL)
 		goto done;
 	process_activate (thread_current ());
 
-	/* Open executable file. */
+	/* 실행 파일을 엽니다. */
 	file = filesys_open (file_name);
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", file_name);
@@ -528,7 +528,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	t->run_file = file;
 	file_deny_write(file);
 
-	/* Read and verify executable header. */
+	/* 실행 파일의 헤더를 읽고 검증합니다. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
 			|| ehdr.e_type != 2
@@ -540,7 +540,7 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	}
 
-	/* Read program headers. */
+	/* 프로그램 헤더를 읽습니다. */
 	file_ofs = ehdr.e_phoff;
 	for (i = 0; i < ehdr.e_phnum; i++) {
 		struct Phdr phdr;
@@ -558,7 +558,7 @@ load (const char *file_name, struct intr_frame *if_) {
 			case PT_PHDR:
 			case PT_STACK:
 			default:
-				/* Ignore this segment. */
+				/* 이 세그먼트는 무시합니다. */
 				break;
 			case PT_DYNAMIC:
 			case PT_INTERP:
@@ -567,19 +567,19 @@ load (const char *file_name, struct intr_frame *if_) {
 			case PT_LOAD:
 				if (validate_segment (&phdr, file)) {
 					bool writable = (phdr.p_flags & PF_W) != 0;
-					uint64_t file_page = phdr.p_offset & ~PGMASK;
-					uint64_t mem_page = phdr.p_vaddr & ~PGMASK;
+					uint64_t file_page = phdr.p_offset & ~PGMASK;	//file_page는 오프셋?
+					uint64_t mem_page = phdr.p_vaddr & ~PGMASK;		//mem_page는 가상 주소?
 					uint64_t page_offset = phdr.p_vaddr & PGMASK;
 					uint32_t read_bytes, zero_bytes;
 					if (phdr.p_filesz > 0) {
-						/* Normal segment.
-						 * Read initial part from disk and zero the rest. */
+						/* 일반적인 세그먼트입니다.  
+					   	   초기 부분은 디스크에서 읽고, 나머지는 0으로 채웁니다.*/
 						read_bytes = page_offset + phdr.p_filesz;
 						zero_bytes = (ROUND_UP (page_offset + phdr.p_memsz, PGSIZE)
 								- read_bytes);
 					} else {
-						/* Entirely zero.
-						 * Don't read anything from disk. */
+						/* 완전히 0으로 초기화됩니다.  
+						   디스크에서 아무 것도 읽지 않습니다. */
 						read_bytes = 0;
 						zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
 					}
@@ -600,57 +600,53 @@ load (const char *file_name, struct intr_frame *if_) {
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
 
-	/* TODO: Your code goes here.
-	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-
-	//여기서 argument passing 구현하기
-
-
 	success = true;
 
 done:
-	/* We arrive here whether the load is successful or not. */
+	/* 로드가 성공했든 실패했든 우리는 여기까지 도달하게 됩니다. */
 	return success;
 }
 
 
-/* Checks whether PHDR describes a valid, loadable segment in
- * FILE and returns true if so, false otherwise. */
+/* PHDR이 FILE 내에서 유효하고 로드 가능한 세그먼트를  
+   설명하는지 확인하며, 해당하는 경우 true를 반환하고  
+   그렇지 않으면 false를 반환합니다. */
 static bool
 validate_segment (const struct Phdr *phdr, struct file *file) {
-	/* p_offset and p_vaddr must have the same page offset. */
+	/* p_offset과 p_vaddr는 동일한 페이지 오프셋을 가져야 합니다. */
 	if ((phdr->p_offset & PGMASK) != (phdr->p_vaddr & PGMASK))
 		return false;
 
-	/* p_offset must point within FILE. */
+	/* p_offset은 FILE 내를 가리켜야 합니다. */
 	if (phdr->p_offset > (uint64_t) file_length (file))
 		return false;
 
-	/* p_memsz must be at least as big as p_filesz. */
+	/* p_memsz는 p_filesz보다 크거나 같아야 합니다. */
 	if (phdr->p_memsz < phdr->p_filesz)
 		return false;
 
-	/* The segment must not be empty. */
+	/* 세그먼트는 비어 있으면 안 됩니다. */
 	if (phdr->p_memsz == 0)
 		return false;
 
-	/* The virtual memory region must both start and end within the
-	   user address space range. */
+	/* 가상 메모리 영역의 시작과 끝은 모두  
+	   사용자 주소 공간 범위 내에 있어야 합니다. */
 	if (!is_user_vaddr ((void *) phdr->p_vaddr))
 		return false;
 	if (!is_user_vaddr ((void *) (phdr->p_vaddr + phdr->p_memsz)))
 		return false;
 
-	/* The region cannot "wrap around" across the kernel virtual
-	   address space. */
+	/* 해당 메모리 영역은 커널 가상 주소 공간을 가로질러  
+	   "랩어라운드(wrap around)"되어서는 안 됩니다. */
 	if (phdr->p_vaddr + phdr->p_memsz < phdr->p_vaddr)
 		return false;
 
-	/* Disallow mapping page 0.
-	   Not only is it a bad idea to map page 0, but if we allowed
-	   it then user code that passed a null pointer to system calls
-	   could quite likely panic the kernel by way of null pointer
-	   assertions in memcpy(), etc. */
+	/* 페이지 0 매핑은 허용하지 않습니다.  
+	   페이지 0을 매핑하는 것은 위험할 뿐만 아니라,  
+	   만약 이를 허용한다면 사용자 코드가 시스템 콜에  
+	   널 포인터(null pointer)를 전달했을 때  
+	   `memcpy()` 등의 함수 내에서 발생하는 널 포인터 단언문(assertion)에 의해  
+	   커널이 패닉(panic)을 일으킬 가능성이 높아집니다. */
 	if (phdr->p_vaddr < PGSIZE)
 		return false;
 
@@ -659,27 +655,29 @@ validate_segment (const struct Phdr *phdr, struct file *file) {
 }
 
 #ifndef VM
-/* Codes of this block will be ONLY USED DURING project 2.
- * If you want to implement the function for whole project 2, implement it
- * outside of #ifndef macro. */
+/* 이 코드 블록은 **오직 프로젝트 2에서만 사용됩니다.**  
+   프로젝트 2 전체에서 해당 기능을 구현하고자 한다면,  
+   `#ifndef` 매크로 외부에 구현해야 합니다. */
 
 /* load() helpers. */
 static bool install_page (void *upage, void *kpage, bool writable);
 
-/* Loads a segment starting at offset OFS in FILE at address
- * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
- * memory are initialized, as follows:
- *
- * - READ_BYTES bytes at UPAGE must be read from FILE
- * starting at offset OFS.
- *
- * - ZERO_BYTES bytes at UPAGE + READ_BYTES must be zeroed.
- *
- * The pages initialized by this function must be writable by the
- * user process if WRITABLE is true, read-only otherwise.
- *
- * Return true if successful, false if a memory allocation error
- * or disk read error occurs. */
+/* 파일 FILE의 OFS 오프셋부터 시작하여  
+   주소 UPAGE에 세그먼트를 로드합니다.  
+   총 READ_BYTES + ZERO_BYTES 바이트의 가상 메모리를 다음과 같이 초기화합니다:
+
+   - UPAGE에서 시작하는 READ_BYTES 바이트는  
+     FILE의 OFS 오프셋부터 읽어옵니다.
+
+   - UPAGE + READ_BYTES부터 시작하는 ZERO_BYTES 바이트는  
+     0으로 초기화합니다.
+
+   이 함수에 의해 초기화된 페이지는  
+   WRITABLE이 true일 경우 사용자 프로세스가 쓰기 가능해야 하며,  
+   false인 경우 읽기 전용이어야 합니다.
+
+   메모리 할당 오류나 디스크 읽기 오류가 발생하지 않으면 true를 반환하고,  
+   그렇지 않으면 false를 반환합니다. */
 static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
@@ -689,9 +687,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 	file_seek (file, ofs);
 	while (read_bytes > 0 || zero_bytes > 0) {
-		/* Do calculate how to fill this page.
-		 * We will read PAGE_READ_BYTES bytes from FILE
-		 * and zero the final PAGE_ZERO_BYTES bytes. */
+		/* 이 페이지를 어떻게 채울지 계산합니다.  
+	  	   FILE에서 PAGE_READ_BYTES 바이트를 읽고,  
+		   마지막 PAGE_ZERO_BYTES 바이트는 0으로 초기화합니다. */
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
@@ -707,14 +705,14 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		}
 		memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
-		/* Add the page to the process's address space. */
+		/* 해당 페이지를 프로세스의 주소 공간에 추가합니다. */
 		if (!install_page (upage, kpage, writable)) {
 			printf("fail\n");
 			palloc_free_page (kpage);
 			return false;
 		}
 
-		/* Advance. */
+		/* 읽은 바이트 수만큼 파일 오프셋을 앞으로 이동시킨다. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
@@ -722,7 +720,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	return true;
 }
 
-/* Create a minimal stack by mapping a zeroed page at the USER_STACK */
+/* USER_STACK 위치에 0으로 초기화된 페이지를 매핑하여 최소한의 스택을 생성합니다. */
 static bool
 setup_stack (struct intr_frame *if_) {
 	uint8_t *kpage;
@@ -739,15 +737,17 @@ setup_stack (struct intr_frame *if_) {
 	return success;
 }
 
-/* Adds a mapping from user virtual address UPAGE to kernel
- * virtual address KPAGE to the page table.
- * If WRITABLE is true, the user process may modify the page;
- * otherwise, it is read-only.
- * UPAGE must not already be mapped.
- * KPAGE should probably be a page obtained from the user pool
- * with palloc_get_page().
- * Returns true on success, false if UPAGE is already mapped or
- * if memory allocation fails. */
+/* 사용자 가상 주소 UPAGE에서 커널 가상 주소 KPAGE로의  
+   매핑을 페이지 테이블에 추가합니다.  
+   WRITABLE이 true이면 사용자 프로세스가 해당 페이지를 수정할 수 있으며,  
+   false이면 읽기 전용입니다.  
+
+   UPAGE는 이미 매핑되어 있지 않아야 합니다.  
+   KPAGE는 아마도 palloc_get_page()를 통해  
+   user pool에서 얻은 페이지여야 합니다.  
+
+   성공 시 true를 반환하며,  
+   UPAGE가 이미 매핑되어 있거나 메모리 할당에 실패한 경우 false를 반환합니다. */
 static bool
 install_page (void *upage, void *kpage, bool writable) {
 	struct thread *t = thread_current ();
@@ -758,31 +758,45 @@ install_page (void *upage, void *kpage, bool writable) {
 			&& pml4_set_page (t->pml4, upage, kpage, writable));
 }
 #else
-/* From here, codes will be used after project 3.
- * If you want to implement the function for only project 2, implement it on the
- * upper block. */
+/* 이 지점부터의 코드는 프로젝트 3 이후에 사용됩니다.  
+   프로젝트 2에서만 해당 기능을 구현하고자 한다면,  
+   위쪽 블록에 구현하세요. */
 
-static bool
+bool
 lazy_load_segment (struct page *page, void *aux) {
-	/* TODO: Load the segment from the file */
-	/* TODO: This called when the first page fault occurs on address VA. */
-	/* TODO: VA is available when calling this function. */
+	/* TODO: 파일에서 세그먼트를 로드합니다. */
+	struct read_file *read_file_load = (struct read_file *)aux;
+	/* TODO: 이 함수는 주소 VA에서 첫 번째 페이지 폴트가 발생했을 때 호출됩니다. */
+
+	file_seek(read_file_load->file, read_file_load->ofs);
+	
+	if(file_read(read_file_load->file, page->frame->kva, read_file_load->page_read_bytes) != (int)read_file_load->page_read_bytes){
+		// palloc_free_page(page->frame->kva);
+		return false;
+	}
+
+	memset(page->frame->kva + read_file_load->page_read_bytes, 0, read_file_load->page_zero_bytes);
+
+	return true;
+	/* TODO: 이 함수를 호출할 때 VA(가상 주소)는 접근 가능한 상태입니다. */
 }
 
-/* Loads a segment starting at offset OFS in FILE at address
- * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
- * memory are initialized, as follows:
- *
- * - READ_BYTES bytes at UPAGE must be read from FILE
- * starting at offset OFS.
- *
- * - ZERO_BYTES bytes at UPAGE + READ_BYTES must be zeroed.
- *
- * The pages initialized by this function must be writable by the
- * user process if WRITABLE is true, read-only otherwise.
- *
- * Return true if successful, false if a memory allocation error
- * or disk read error occurs. */
+/* 파일 FILE의 OFS 오프셋부터 시작하여  
+   주소 UPAGE에 세그먼트를 로드합니다.  
+   총 READ_BYTES + ZERO_BYTES 바이트의 가상 메모리를 다음과 같이 초기화합니다:
+
+   - UPAGE에서 시작하는 READ_BYTES 바이트는  
+     FILE의 OFS 오프셋부터 읽어옵니다.
+
+   - UPAGE + READ_BYTES부터 시작하는 ZERO_BYTES 바이트는  
+     0으로 초기화합니다.
+
+   이 함수에 의해 초기화된 페이지는  
+   WRITABLE이 true인 경우 사용자 프로세스가 쓸 수 있어야 하고,  
+   그렇지 않은 경우 읽기 전용이어야 합니다.
+
+   메모리 할당 오류나 디스크 읽기 오류가 발생하지 않으면 true를 반환하고,  
+   그렇지 않으면 false를 반환합니다. */
 static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
@@ -791,14 +805,24 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	ASSERT (ofs % PGSIZE == 0);
 
 	while (read_bytes > 0 || zero_bytes > 0) {
-		/* Do calculate how to fill this page.
-		 * We will read PAGE_READ_BYTES bytes from FILE
-		 * and zero the final PAGE_ZERO_BYTES bytes. */
-		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-		size_t page_zero_bytes = PGSIZE - page_read_bytes;
+		/* 이 페이지를 어떻게 채울지 계산합니다.  
+		   PAGE_READ_BYTES 바이트는 FILE에서 읽고,  
+		   마지막 PAGE_ZERO_BYTES 바이트는 0으로 초기화합니다.*/
+		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;	//파일로 부터 읽을 바이트 수?
+		size_t page_zero_bytes = PGSIZE - page_read_bytes;  				//0으로 채워야 할 바이트의 수?
 
-		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
+		/* TODO: `lazy_load_segment` 함수에 정보를 전달하기 위해 `aux`를 설정합니다. */
+		// 무슨 정보가 들어가야 하는지?
+		//file_read에 필요한 정보?
+
+		struct read_file *read_file_load = malloc(sizeof(struct read_file));	//read_file 구조체 할당
+		read_file_load->file = file;
+		read_file_load->ofs = ofs;
+		read_file_load->page_read_bytes = page_read_bytes;
+		read_file_load->page_zero_bytes = page_zero_bytes;
+
+		// void *aux = NULL;
+		void *aux = (void *)read_file_load;
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
 					writable, lazy_load_segment, aux))
 			return false;
@@ -807,20 +831,33 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+
+		ofs += page_read_bytes;
 	}
 	return true;
 }
 
-/* Create a PAGE of stack at the USER_STACK. Return true on success. */
+/* USER_STACK 위치에 스택용 PAGE를 생성합니다. 성공 시 true를 반환합니다. */
 static bool
 setup_stack (struct intr_frame *if_) {
 	bool success = false;
 	void *stack_bottom = (void *) (((uint8_t *) USER_STACK) - PGSIZE);
+	struct thread *curr = thread_current();		//디버깅용
+	/* TODO: `stack_bottom` 위치에 스택을 매핑하고, 즉시 해당 페이지를 할당(claim)합니다. */
+	//페이지를 초기화 하는데 사용
+	if(!vm_alloc_page_with_initializer (VM_ANON | VM_MARKER_0, stack_bottom, true, NULL, NULL)){
+		return success;
+	}
+	if(!vm_claim_page(stack_bottom)){
+		return success;
+	}
+	/* TODO: 성공하면, 해당 값에 따라 `rsp`를 설정합니다.*/
+	if_->rsp = USER_STACK;
+	curr->stack_bottom = stack_bottom;
 
-	/* TODO: Map the stack on stack_bottom and claim the page immediately.
-	 * TODO: If success, set the rsp accordingly.
-	 * TODO: You should mark the page is stack. */
-	/* TODO: Your code goes here */
+	/* TODO: 해당 페이지를 스택으로 표시해야 합니다. */
+	success = true;
+	/* TODO: 여기에 여러분의 코드가 들어갑니다. */
 
 	return success;
 }

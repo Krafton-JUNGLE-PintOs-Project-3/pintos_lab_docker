@@ -105,10 +105,14 @@ struct thread {
 	struct child * my_self;
 	struct file* run_file;
 
-#ifdef USERPROG
-	/* Owned by userprog/process.c. */
+
 	uint64_t *pml4;                     /* Page map level 4 */
 	struct file *file_table[127]; // 현재 스레드가 열고 있는 파일 목록
+
+	void *stack_bottom;
+#ifdef USERPROG
+	/* Owned by userprog/process.c. */
+
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
